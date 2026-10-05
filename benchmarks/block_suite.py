@@ -99,9 +99,7 @@ def evaluate_fit(target, training, evaluation, truth_logs, order, tc_samples, se
         ),
         repeats=fit_repeats,
     )
-    logs, density_first, density_warm = timed(
-        lambda: log_prob(fitted.state, evaluation), repeats=3
-    )
+    logs, density_first, density_warm = timed(lambda: log_prob(fitted.state, evaluation), repeats=3)
     draws, sample_first, sample_warm = timed(
         lambda: sample(jax.random.key(seed + 1), fitted.state, len(training)), repeats=3
     )
@@ -165,7 +163,9 @@ def save_case_plots(target, evaluation, fits, draws, output):
     display = [index for block in target.blocks for index in block]
     for page, start in enumerate(range(0, target.dimension, 6), 1):
         indices = display[start : start + 6]
-        combined = np.concatenate([evaluation[:, indices], *[x[:, indices] for x in draws.values()]])
+        combined = np.concatenate(
+            [evaluation[:, indices], *[x[:, indices] for x in draws.values()]]
+        )
         limits = [tuple(np.quantile(combined[:, j], [0.005, 0.995])) for j in range(len(indices))]
         options = dict(
             bins=22,
@@ -190,7 +190,11 @@ def save_case_plots(target, evaluation, fits, draws, output):
         handles.extend(Line2D([0], [0], color=COLORS[o], label=f"Morph order {o}") for o in draws)
         fig.legend(handles=handles, loc="upper right", fontsize=10)
         fig.suptitle(f"{target.name} | {target.dimension}D | page {page} | 1,000 draws", y=1.01)
-        fig.savefig(output / f"corner_{target.name}_{target.dimension:02d}d_p{page}.png", dpi=105, bbox_inches="tight")
+        fig.savefig(
+            output / f"corner_{target.name}_{target.dimension:02d}d_p{page}.png",
+            dpi=105,
+            bbox_inches="tight",
+        )
         plt.close(fig)
     fig, axes = plt.subplots(1, len(fits) + 1, figsize=(15, 4), constrained_layout=True)
     partitions = [("True blocks", target.blocks)] + [
@@ -228,7 +232,9 @@ def save_summaries(records, baselines, output):
                 ax.errorbar(
                     [row["dimension"] for row in rows],
                     [row[metric] for row in rows],
-                    yerr=[1.96 * row["forward_kl_se"] for row in rows] if metric == "forward_kl" else None,
+                    yerr=[1.96 * row["forward_kl_se"] for row in rows]
+                    if metric == "forward_kl"
+                    else None,
                     color=COLORS[order],
                     marker="o",
                     capsize=3,
@@ -236,7 +242,10 @@ def save_summaries(records, baselines, output):
                 )
             if metric == "forward_kl":
                 for baseline, color in [("oracle", "#009e73"), ("normal", "#cc79a7")]:
-                    rows = sorted((r for r in baselines if r["scenario"] == name), key=lambda r: r["dimension"])
+                    rows = sorted(
+                        (r for r in baselines if r["scenario"] == name),
+                        key=lambda r: r["dimension"],
+                    )
                     ax.plot(
                         [r["dimension"] for r in rows],
                         [r[f"{baseline}_forward_kl"] for r in rows],
@@ -305,7 +314,9 @@ def metadata():
 def save_report(records, baselines, meta, output):
     payload = {"metadata": meta, "records": records, "baselines": baselines}
     (output / "results.json").write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")
-    flat = [{k: v for k, v in row.items() if not isinstance(v, (list, tuple, dict))} for row in records]
+    flat = [
+        {k: v for k, v in row.items() if not isinstance(v, (list, tuple, dict))} for row in records
+    ]
     if flat:
         with (output / "metrics.csv").open("w", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=list(flat[0]))
@@ -443,7 +454,14 @@ def main():
                 orders = [2, 3] if name in ("strong_pairs", "triplets") else [2]
                 for order in orders:
                     row, _, _ = evaluate_fit(
-                        target, training, evaluation, truth_logs, order, 1000, seed + 3, args.fit_repeats
+                        target,
+                        training,
+                        evaluation,
+                        truth_logs,
+                        order,
+                        1000,
+                        seed + 3,
+                        args.fit_repeats,
                     )
                     row["configuration"] = "full_tc"
                     records.append(row)

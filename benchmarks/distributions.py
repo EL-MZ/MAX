@@ -47,9 +47,7 @@ class BlockTarget:
             size = len(block)
             if self.name == "banana_pairs" and size == 2:
                 x = rng.normal(size=n)
-                values[:, block] = np.column_stack(
-                    (x, 0.7 * (x**2 - 1) + 0.2 * rng.normal(size=n))
-                )
+                values[:, block] = np.column_stack((x, 0.7 * (x**2 - 1) + 0.2 * rng.normal(size=n)))
             elif self.name == "multimodal_pairs" and size == 2:
                 signs = rng.choice([-1.0, 1.0], size=n)
                 noise = rng.multivariate_normal(np.zeros(2), correlation * 0.25, size=n)
@@ -76,7 +74,9 @@ class BlockTarget:
             elif self.name == "multimodal_pairs" and len(block) == 2:
                 logs = logsumexp(
                     [
-                        stats.multivariate_normal.logpdf(values, np.full(2, mean), correlation * 0.25)
+                        stats.multivariate_normal.logpdf(
+                            values, np.full(2, mean), correlation * 0.25
+                        )
                         for mean in [-2.0, 2.0]
                     ],
                     axis=0,
@@ -94,9 +94,7 @@ class BlockTarget:
                             for j, index in enumerate(block)
                         ]
                     )
-                    z = stats.norm.ppf(
-                        np.clip(u, np.finfo(float).eps, 1 - np.finfo(float).eps)
-                    )
+                    z = stats.norm.ppf(np.clip(u, np.finfo(float).eps, 1 - np.finfo(float).eps))
                     copula = stats.multivariate_normal.logpdf(z, np.zeros(len(block)), correlation)
                     copula -= stats.norm.logpdf(z).sum(axis=1)
                     logs[inside] = copula + marginal_logs[inside].sum(axis=1)
@@ -130,7 +128,9 @@ def make_target(name, dimension, seed=0):
     width = 1 if name == "independent_mixed" else 3 if name == "triplets" else 2
     blocks = tuple(tuple(range(i, min(i + width, dimension))) for i in range(0, dimension, width))
     rho = 0.35 if name == "weak_pairs" else 0.7 if name == "triplets" else 0.85
-    correlations = tuple((1 - rho) * np.eye(len(b)) + rho * np.ones((len(b), len(b))) for b in blocks)
+    correlations = tuple(
+        (1 - rho) * np.eye(len(b)) + rho * np.ones((len(b), len(b))) for b in blocks
+    )
     families = (
         stats.norm(loc=-1, scale=1.2),
         stats.gamma(a=2.5, scale=0.8),
@@ -154,6 +154,7 @@ def block_metrics(true_blocks, estimated_blocks):
     True singleton targets have no dependent pairs, so their recall is undefined.
     Forced grouping at order > 1 is still reported as false-positive edges.
     """
+
     def edges(blocks):
         return {tuple(sorted(pair)) for block in blocks for pair in combinations(block, 2)}
 
