@@ -2,6 +2,8 @@
 
 Block-distribution benchmarks, KL diagnostics, timings, and corner plots are
 described in [docs/block-benchmarks.md](docs/block-benchmarks.md).
+[Measured findings and plots](benchmark-results/blocks-2026-10-05/FINDINGS.md)
+cover block recovery, density errors, and CPU performance through 30 dimensions.
 
 JAX implementation of the Morph probability density approximation and the
 MorphZ post-processing Bayesian evidence estimator. The baseline follows

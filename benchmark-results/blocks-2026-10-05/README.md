@@ -1,5 +1,7 @@
 # JAX Morph block benchmark results
 
+[Read the measured findings and limitations](FINDINGS.md).
+
 Six analytic target families at 6, 12, 20, and 30 dimensions; shuffled input columns.
 Each fit uses 1,000 sample vectors (1,000 values per parameter), followed by separate
 1,000-vector evaluation and proposal batches. Main TC scoring uses a reproducible

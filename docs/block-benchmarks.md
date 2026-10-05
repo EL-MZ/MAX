@@ -56,3 +56,13 @@ benchmark branch. [Open the results](../benchmark-results/blocks-2026-10-05/READ
 
 The original merged `src/jax_morph` implementation is left unchanged; this
 benchmark measures it without inserting a new estimator or selection rule.
+
+To regenerate plots from existing recorded partitions and seeds, use
+`python -m benchmarks.block_suite --replot-results --output
+benchmark-results/blocks-2026-10-05`. This rebuilds factors and verifies every
+main held-out KL value without rerunning TC scoring. Original measurements
+and timings remain unchanged; `plot_metadata.json` records the rendering commit.
+
+[Read the measured findings](../benchmark-results/blocks-2026-10-05/FINDINGS.md)
+for the tested recovery limits, KDE smoothing errors, support leakage, and
+full-scoring speed comparison.
