@@ -100,7 +100,13 @@ def sgm_kernel(blocks, scores, *, dimension, n_seeds, seed_batch_size=16, early_
 
 
 def seeded_greedy_maximization(
-    blocks, scores, *, dimension, n_seeds=None, seed_batch_size=16, early_stop=False,
+    blocks,
+    scores,
+    *,
+    dimension,
+    n_seeds=None,
+    seed_batch_size=16,
+    early_stop=False,
 ):
     """Select floor(d/L) disjoint blocks using the top K seeds.
 

@@ -33,6 +33,11 @@ KDEs exclude zero-weight centers, which contribute no mixture mass, to avoid a
 reference logpdf NaN issue in SciPy. On commit ee5e10f, all 43 numerical tests,
 the conjugate Gaussian example, lint, and the SGM benchmark passed on both
 JAX 0.4.35 and 0.11.2. Subsequent checks also exercise both SGM scan strategies.
+Run [37265043256](https://github.com/EL-MZ/MAX/actions/runs/37265043256) passed
+58 tests on each version, including both SGM scan strategies, plus the Gaussian
+example and reference-equivalence benchmark. The final workflow checks committed
+formatting without modifying files. Full initial timing metadata is preserved in
+[`sgm_cpu_benchmark.json`](sgm_cpu_benchmark.json).
 
 ## Initial CPU benchmark
 

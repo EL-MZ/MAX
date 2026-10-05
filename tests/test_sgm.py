@@ -34,7 +34,11 @@ def test_matches_paper_reference(dimension, order, n_seeds, early_stop):
     count = len(blocks) if n_seeds is None else min(n_seeds, len(blocks))
     expected, totals = reference_sgm(blocks, scores, dimension, count)
     actual = seeded_greedy_maximization(
-        blocks, scores, dimension=dimension, n_seeds=n_seeds, seed_batch_size=3,
+        blocks,
+        scores,
+        dimension=dimension,
+        n_seeds=n_seeds,
+        seed_batch_size=3,
         early_stop=early_stop,
     )
     np.testing.assert_array_equal(actual.candidate_indices, expected)
