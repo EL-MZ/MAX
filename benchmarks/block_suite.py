@@ -171,7 +171,7 @@ def save_case_plots(target, evaluation, fits, draws, output):
             bins=22,
             range=limits,
             smooth=0.8,
-            smooth1d=0.8,
+            smooth1d=None,
             levels=(0.68, 0.95),
             plot_datapoints=False,
             fill_contours=False,

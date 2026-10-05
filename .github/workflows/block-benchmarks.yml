@@ -58,7 +58,9 @@ jobs:
           ruff format --check .
           pytest -q
       - name: Run block, density, and speed suite
-        run: python -m benchmarks.block_suite --output benchmark-results/blocks-2026-10-05
+        run: |
+          python -m benchmarks.block_suite --dimensions 6 --scenarios independent_mixed banana_pairs --skip-ablations --output /tmp/morph-plot-check
+          python -m benchmarks.block_suite --output benchmark-results/blocks-2026-10-05
       - name: Preserve benchmark artifacts
         if: always()
         uses: actions/upload-artifact@v4
