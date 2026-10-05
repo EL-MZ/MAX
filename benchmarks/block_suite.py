@@ -446,8 +446,8 @@ def replot_existing_results(output):
         "plot_generation_commit": metadata()["benchmark_commit"],
         "measurement_commit": data["metadata"]["benchmark_commit"],
         "verified_main_kl_records": len(rows),
-        "note": "Plots rebuilt from recorded partitions and seeds; original measured KL and timings unchanged.",
-        "style": "Fresh colored histogram options, contour-only overlays, accurate nonlinear labels",
+        "note": "Rebuilt from saved partitions and seeds; measured KL and timings unchanged.",
+        "style": "Colored histograms, contour overlays, accurate nonlinear labels",
     }
     (output / "plot_metadata.json").write_text(json.dumps(plot_metadata, indent=2) + "\n")
 
