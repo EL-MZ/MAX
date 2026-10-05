@@ -30,6 +30,7 @@ from matplotlib.lines import Line2D  # noqa: E402
 
 from benchmarks.distributions import SCENARIOS, block_metrics, make_target  # noqa: E402
 from jax_morph import fit, fit_kde, log_prob, sample, sgm_kernel  # noqa: E402
+from jax_morph.kde import kde_log_prob, sample_kde  # noqa: E402
 from jax_morph.morph import MorphState  # noqa: E402
 
 jax.config.update("jax_enable_x64", True)
@@ -158,7 +159,7 @@ def partition_matrix(blocks, dimension):
     return matrix
 
 
-def save_case_plots(target, evaluation, fits, draws, output):
+def save_case_plots(target, evaluation, states, draws, output):
     # Display whole true blocks together; the model was fitted on shuffled columns.
     display = [index for block in target.blocks for index in block]
     for page, start in enumerate(range(0, target.dimension, 6), 1):
@@ -175,17 +176,21 @@ def save_case_plots(target, evaluation, fits, draws, output):
             levels=(0.68, 0.95),
             plot_datapoints=False,
             fill_contours=False,
-            hist_kwargs={"density": True},
+            plot_density=False,
             quiet=True,
         )
         fig = corner.corner(
             evaluation[:, indices],
             labels=[target.labels[i] for i in indices],
             color="#202124",
+            hist_kwargs={"density": True, "color": "#202124"},
             **options,
         )
         for order in sorted(draws):
-            corner.corner(draws[order][:, indices], fig=fig, color=COLORS[order], **options)
+            corner.corner(
+                draws[order][:, indices], fig=fig, color=COLORS[order],
+                hist_kwargs={"density": True, "color": COLORS[order]}, **options,
+            )
         handles = [Line2D([0], [0], color="#202124", label="Independent truth draw")]
         handles.extend(Line2D([0], [0], color=COLORS[o], label=f"Morph order {o}") for o in draws)
         fig.legend(handles=handles, loc="upper right", fontsize=10)
@@ -196,9 +201,9 @@ def save_case_plots(target, evaluation, fits, draws, output):
             bbox_inches="tight",
         )
         plt.close(fig)
-    fig, axes = plt.subplots(1, len(fits) + 1, figsize=(15, 4), constrained_layout=True)
+    fig, axes = plt.subplots(1, len(states) + 1, figsize=(15, 4), constrained_layout=True)
     partitions = [("True blocks", target.blocks)] + [
-        (f"Morph order {order}", fit_result.state.blocks) for order, fit_result in fits.items()
+        (f"Morph order {order}", state.blocks) for order, state in states.items()
     ]
     for ax, (title, blocks) in zip(axes, partitions):
         matrix = partition_matrix(blocks, target.dimension)[np.ix_(display, display)]
@@ -396,6 +401,57 @@ def write_readme(records, output):
     (output / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+
+def replot_existing_results(output):
+    """Rebuild plots from recorded partitions; verify unchanged held-out KL.
+
+    Factor kernels avoid recompiling joint samplers for every discrete partition.
+    They implement exactly the same per-factor draws and independent keys.
+    Existing measurements and timings are preserved.
+    """
+    data = json.loads((output / "results.json").read_text())
+    rows = [row for row in data["records"] if row["configuration"] == "main"]
+    plots = output / "plots"
+    plots.mkdir(parents=True, exist_ok=True)
+    descriptions = []
+    cases = list(dict.fromkeys((r["scenario"], r["dimension"]) for r in rows))
+    for name, dimension in cases:
+        case = [r for r in rows if r["scenario"] == name and r["dimension"] == dimension]
+        seed = case[0]["seed"] - 3
+        target = make_target(name, dimension, seed)
+        descriptions.append(target.description())
+        training = target.sample(np.random.default_rng(seed + 1), 1000)
+        evaluation = target.sample(np.random.default_rng(seed + 2), 1000)
+        truth_logs = target.logpdf(evaluation)
+        states, draws = {}, {}
+        for row in case:
+            blocks = tuple(tuple(b) for b in row["selected_blocks"])
+            factors = tuple(fit_kde(training[:, block]) for block in blocks)
+            state = MorphState(blocks, factors, dimension)
+            keys = jax.random.split(jax.random.key(row["seed"] + 1), len(blocks))
+            proposal = np.zeros_like(training)
+            logs = np.zeros(len(evaluation))
+            for block, factor, key in zip(blocks, factors, keys):
+                proposal[:, block] = np.asarray(sample_kde(key, factor, len(training)))
+                logs += np.asarray(kde_log_prob(factor, evaluation[:, block]))
+            measured_kl = float(np.mean(truth_logs - logs))
+            np.testing.assert_allclose(measured_kl, row["forward_kl"], rtol=1e-9, atol=1e-9)
+            states[row["order"]], draws[row["order"]] = state, proposal
+        save_case_plots(target, evaluation, states, draws, plots)
+        print(f"Replotted {name} {dimension}D; held-out KL unchanged", flush=True)
+    save_summaries(data["records"], data["baselines"], output)
+    write_readme(data["records"], output)
+    (output / "targets.json").write_text(json.dumps(descriptions, indent=2) + "\n")
+    plot_metadata = {
+        "plot_generation_commit": metadata()["benchmark_commit"],
+        "measurement_commit": data["metadata"]["benchmark_commit"],
+        "verified_main_kl_records": len(rows),
+        "note": "Plots rebuilt from recorded partitions and seeds; original measured KL and timings unchanged.",
+        "style": "Fresh colored histogram options, contour-only overlays, accurate nonlinear labels",
+    }
+    (output / "plot_metadata.json").write_text(json.dumps(plot_metadata, indent=2) + "\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("benchmark-results/blocks-2026-10-05"))
@@ -403,7 +459,11 @@ def main():
     parser.add_argument("--scenarios", nargs="+", choices=SCENARIOS, default=list(SCENARIOS))
     parser.add_argument("--fit-repeats", type=int, default=1)
     parser.add_argument("--skip-ablations", action="store_true")
+    parser.add_argument("--replot-results", action="store_true")
     args = parser.parse_args()
+    if args.replot_results:
+        replot_existing_results(args.output)
+        return
     if any(d < 3 or d > 30 for d in args.dimensions) or args.fit_repeats < 1:
         parser.error("dimensions must be 3..30 and fit-repeats >= 1")
     output = args.output
@@ -446,7 +506,7 @@ def main():
                 )
                 row["configuration"] = "main"
                 records.append(row)
-                fits[order], draws[order] = fitted, proposal
+                fits[order], draws[order] = fitted.state, proposal
                 print(json.dumps(row, allow_nan=False), flush=True)
                 save_report(records, baselines, meta, output)
             save_case_plots(target, evaluation, fits, draws, plots)

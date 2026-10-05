@@ -27,6 +27,7 @@ jobs:
       JAX_ENABLE_X64: 'true'
       OMP_NUM_THREADS: '2'
       OPENBLAS_NUM_THREADS: '2'
+      PLOTS_ONLY: ${{ contains(github.event.head_commit.message, '[plots-only]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -59,8 +60,12 @@ jobs:
           pytest -q
       - name: Run block, density, and speed suite
         run: |
-          python -m benchmarks.block_suite --dimensions 6 --scenarios independent_mixed banana_pairs --skip-ablations --output /tmp/morph-plot-check
-          python -m benchmarks.block_suite --output benchmark-results/blocks-2026-10-05
+          if [ "$PLOTS_ONLY" = "true" ]; then
+            python -m benchmarks.block_suite --replot-results --output benchmark-results/blocks-2026-10-05
+          else
+            python -m benchmarks.block_suite --dimensions 6 --scenarios independent_mixed banana_pairs --skip-ablations --output /tmp/morph-plot-check
+            python -m benchmarks.block_suite --output benchmark-results/blocks-2026-10-05
+          fi
       - name: Preserve benchmark artifacts
         if: always()
         uses: actions/upload-artifact@v4

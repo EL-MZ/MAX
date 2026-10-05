@@ -112,6 +112,10 @@ class BlockTarget:
             "permutation_new_to_old": self.permutation.tolist(),
             "labels": self.labels,
             "latent_correlations": [value.tolist() for value in self.correlations],
+            "marginal_note": (
+                "Listed marginals apply to copula blocks and singleton tails. "
+                "Banana and mixture pairs use the explicit joint parameters below."
+            ),
             "marginals": [
                 {"distribution": dist.dist.name, "args": dist.args, "kwargs": dist.kwds}
                 for dist in self.marginals
@@ -144,7 +148,14 @@ def make_target(name, dimension, seed=0):
     if name in ("banana_pairs", "multimodal_pairs"):
         marginals = tuple(stats.norm() for _ in range(dimension))
     permutation = rng.permutation(dimension)
-    labels = tuple(f"x{old + 1}:{marginals[old].dist.name}" for old in permutation)
+    families_by_column = [dist.dist.name for dist in marginals]
+    if name == "banana_pairs":
+        families_by_column = ["norm" if i % 2 == 0 else "banana" for i in range(dimension)]
+    elif name == "multimodal_pairs":
+        families_by_column = [
+            "mixture" if i < dimension - dimension % 2 else "norm" for i in range(dimension)
+        ]
+    labels = tuple(f"x{old + 1}:{families_by_column[old]}" for old in permutation)
     return BlockTarget(name, dimension, blocks, permutation, marginals, correlations, labels)
 
 
