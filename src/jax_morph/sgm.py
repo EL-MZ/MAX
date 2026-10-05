@@ -40,8 +40,8 @@ def candidate_blocks(dimension, order=2, *, max_candidates=100_000):
     return jnp.asarray(list(combinations(range(dimension), order)), dtype=jnp.int32)
 
 
-def _greedy_seed(seed, sorted_blocks, sorted_scores, dimension):
-    """Scan a sorted candidate list, stopping as soon as the partition is full."""
+def _greedy_seed(seed, sorted_blocks, sorted_scores, dimension, early_stop):
+    """Scan ranked candidates, optionally stopping when the partition is full."""
     candidate_count, order = sorted_blocks.shape
     block_count = dimension // order
     selected = jnp.full((block_count,), -1, dtype=jnp.int32).at[0].set(seed)
@@ -58,21 +58,30 @@ def _greedy_seed(seed, sorted_blocks, sorted_scores, dimension):
 
         def accept(_):
             return (
-                count + 1, used.at[block].set(True), selected.at[count].set(cursor),
+                count + 1,
+                used.at[block].set(True),
+                selected.at[count].set(cursor),
                 total + sorted_scores[cursor],
             )
 
+        can_accept = (count < block_count) & ~jnp.any(used[block])
         count, used, selected, total = jax.lax.cond(
-            jnp.any(used[block]), lambda _: (count, used, selected, total), accept, None
+            can_accept, accept, lambda _: (count, used, selected, total), None
         )
         return cursor + 1, count, used, selected, total
 
-    _, _, _, selected, total = jax.lax.while_loop(unfinished, scan_candidate, initial)
+    if early_stop:
+        final = jax.lax.while_loop(unfinished, scan_candidate, initial)
+    else:
+        final = jax.lax.fori_loop(
+            0, candidate_count, lambda _, carry: scan_candidate(carry), initial
+        )
+    _, _, _, selected, total = final
     return selected, total
 
 
-@partial(jax.jit, static_argnames=("dimension", "n_seeds", "seed_batch_size"))
-def sgm_kernel(blocks, scores, *, dimension, n_seeds, seed_batch_size=16):
+@partial(jax.jit, static_argnames=("dimension", "n_seeds", "seed_batch_size", "early_stop"))
+def sgm_kernel(blocks, scores, *, dimension, n_seeds, seed_batch_size=16, early_stop=False):
     """JIT-compatible core for a complete candidate collection and valid scores.
 
     Stable sorting makes ties reproducible. Seeds are processed in bounded
@@ -81,22 +90,29 @@ def sgm_kernel(blocks, scores, *, dimension, n_seeds, seed_batch_size=16):
     permutation = jnp.argsort(-scores, stable=True)
     sorted_blocks, sorted_scores = blocks[permutation], scores[permutation]
     selected, totals = jax.lax.map(
-        lambda seed: _greedy_seed(seed, sorted_blocks, sorted_scores, dimension),
+        lambda seed: _greedy_seed(seed, sorted_blocks, sorted_scores, dimension, early_stop),
         jnp.arange(n_seeds, dtype=jnp.int32),
         batch_size=min(seed_batch_size, n_seeds),
     )
     best_seed = jnp.argmax(totals)
     indices = permutation[selected[best_seed]]
-    return SGMResult(
-        blocks[indices], indices, totals[best_seed], permutation[best_seed], totals
-    )
+    return SGMResult(blocks[indices], indices, totals[best_seed], permutation[best_seed], totals)
 
 
-def seeded_greedy_maximization(blocks, scores, *, dimension, n_seeds=None, seed_batch_size=16):
+def seeded_greedy_maximization(
+    blocks,
+    scores,
+    *,
+    dimension,
+    n_seeds=None,
+    seed_batch_size=16,
+    early_stop=False,
+):
     """Select floor(d/L) disjoint blocks using the top K seeds.
 
     ``n_seeds=None`` tries every seed. Supply the *complete* set of length-L
     combinations; incomplete graphs would require a separate set-packing API.
+    Early stopping preserves selections but its speed depends on device/compiler.
     """
     dimension = positive_integer(dimension, "dimension")
     positive_integer(seed_batch_size, "seed_batch_size")
@@ -108,7 +124,8 @@ def seeded_greedy_maximization(blocks, scores, *, dimension, n_seeds=None, seed_
         raise ValueError("blocks must contain integer dimension indices with 1 <= order <= d")
     canonical = np.sort(blocks_np, axis=1)
     if (
-        np.any(canonical < 0) or np.any(canonical >= dimension)
+        np.any(canonical < 0)
+        or np.any(canonical >= dimension)
         or np.any(np.diff(canonical, axis=1) == 0)
         or len(np.unique(canonical, axis=0)) != comb(dimension, order)
         or len(canonical) != comb(dimension, order)
@@ -121,6 +138,10 @@ def seeded_greedy_maximization(blocks, scores, *, dimension, n_seeds=None, seed_
     n_seeds = len(canonical) if n_seeds is None else positive_integer(n_seeds, "n_seeds")
     n_seeds = min(n_seeds, len(canonical))
     return sgm_kernel(
-        jnp.asarray(blocks_np), jnp.asarray(scores_np, dtype=jnp.result_type(scores_np, 1.0)),
-        dimension=dimension, n_seeds=n_seeds, seed_batch_size=seed_batch_size,
+        jnp.asarray(blocks_np),
+        jnp.asarray(scores_np, dtype=jnp.result_type(scores_np, 1.0)),
+        dimension=dimension,
+        n_seeds=n_seeds,
+        seed_batch_size=seed_batch_size,
+        early_stop=early_stop,
     )

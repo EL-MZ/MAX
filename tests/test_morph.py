@@ -57,9 +57,9 @@ def test_partition_singletons_product_density_and_independent_draws():
     draws = np.asarray(jax.jit(lambda key: sample(key, state, 10_000))(jax.random.key(2)))
     a, b = state.blocks[0][0], state.blocks[-1][0]
     assert abs(np.corrcoef(draws[:, a], draws[:, b])[0, 1]) < 0.05
-    np.testing.assert_array_equal(sample(jax.random.key(7), state, 8), sample(
-        jax.random.key(7), state, 8
-    ))
+    np.testing.assert_array_equal(
+        sample(jax.random.key(7), state, 8), sample(jax.random.key(7), state, 8)
+    )
 
 
 def test_weighted_fit_and_order_one():

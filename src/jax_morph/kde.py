@@ -31,25 +31,38 @@ class KDEState(NamedTuple):
 @jax.jit
 def _fit_kde(samples, weights, bandwidth_scale, regularization):
     """Unchecked numerical kernel; weights must already sum to one."""
+    dtype = jnp.result_type(samples, weights)
+    samples = samples.astype(dtype)
+    weights = weights.astype(dtype)
     dimension = samples.shape[1]
-    location = weights @ samples
-    centered = samples - location
+    offsets = samples - samples[0]
+    mean_offset = weights @ offsets
+    location = samples[0] + mean_offset
+    centered = offsets - mean_offset
     sum_squared_weights = jnp.sum(weights**2)
     effective_size = 1.0 / sum_squared_weights
     covariance = (centered.T * weights) @ centered / (1.0 - sum_squared_weights)
     # An opt-in diagonal ridge retains the original parameter units.
     covariance += regularization * jnp.diag(jnp.diag(covariance))
+    deviations = jnp.sqrt(jnp.diag(covariance))
+    correlation = covariance / (deviations[:, None] * deviations[None, :])
+    nonsingular = jnp.linalg.eigvalsh(correlation)[0] > jnp.finfo(dtype).eps * dimension
     bandwidth = bandwidth_scale * (effective_size * (dimension + 2) / 4.0) ** (
         -1.0 / (dimension + 4)
     )
     cholesky = jnp.linalg.cholesky(covariance) * bandwidth
+    cholesky = jnp.where(nonsingular, cholesky, jnp.nan)
     whitened = solve_triangular(cholesky, centered.T, lower=True).T
-    log_normalizer = (
-        0.5 * dimension * jnp.log(2 * jnp.pi) + jnp.sum(jnp.log(jnp.diag(cholesky)))
-    )
+    log_normalizer = 0.5 * dimension * jnp.log(2 * jnp.pi) + jnp.sum(jnp.log(jnp.diag(cholesky)))
     return KDEState(
-        samples, whitened, location, cholesky, jnp.log(weights), log_normalizer,
-        bandwidth, effective_size,
+        samples,
+        whitened,
+        location,
+        cholesky,
+        jnp.log(weights),
+        log_normalizer,
+        bandwidth,
+        effective_size,
     )
 
 
@@ -66,9 +79,7 @@ def fit_kde(samples, weights=None, *, bandwidth_scale=1.0, regularization=0.0):
         raise ValueError("regularization must be finite and nonnegative")
     if np.count_nonzero(weights) <= samples.shape[1]:
         raise ValueError("a KDE needs more positive-weight samples than dimensions")
-    state = _fit_kde(
-        jnp.asarray(samples), jnp.asarray(weights), bandwidth_scale, regularization
-    )
+    state = _fit_kde(jnp.asarray(samples), jnp.asarray(weights), bandwidth_scale, regularization)
     if not np.isfinite(np.asarray(state.cholesky)).all():
         raise ValueError(
             "KDE covariance is singular; remove constant dimensions or explicitly "

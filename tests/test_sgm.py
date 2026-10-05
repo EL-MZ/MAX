@@ -27,13 +27,19 @@ def reference_sgm(blocks, scores, dimension, n_seeds):
 
 @pytest.mark.parametrize("dimension,order", [(7, 2), (9, 3), (8, 4), (4, 4), (5, 1)])
 @pytest.mark.parametrize("n_seeds", [1, 5, None])
-def test_matches_paper_reference(dimension, order, n_seeds):
+@pytest.mark.parametrize("early_stop", [False, True])
+def test_matches_paper_reference(dimension, order, n_seeds, early_stop):
     blocks = np.asarray(candidate_blocks(dimension, order))
     scores = np.random.default_rng(61).uniform(size=len(blocks))
     count = len(blocks) if n_seeds is None else min(n_seeds, len(blocks))
     expected, totals = reference_sgm(blocks, scores, dimension, count)
     actual = seeded_greedy_maximization(
-        blocks, scores, dimension=dimension, n_seeds=n_seeds, seed_batch_size=3
+        blocks,
+        scores,
+        dimension=dimension,
+        n_seeds=n_seeds,
+        seed_batch_size=3,
+        early_stop=early_stop,
     )
     np.testing.assert_array_equal(actual.candidate_indices, expected)
     np.testing.assert_allclose(actual.seed_totals, totals, rtol=1e-12)
@@ -45,9 +51,9 @@ def test_ties_are_stable_and_kernel_accepts_traced_scores():
     blocks = candidate_blocks(7, 2)
     scores = np.zeros(len(blocks))
     expected, totals = reference_sgm(np.asarray(blocks), scores, 7, 4)
-    compiled = jax.jit(lambda values: sgm_kernel(
-        blocks, values, dimension=7, n_seeds=4, seed_batch_size=2
-    ))
+    compiled = jax.jit(
+        lambda values: sgm_kernel(blocks, values, dimension=7, n_seeds=4, seed_batch_size=2)
+    )
     result = compiled(scores)
     np.testing.assert_array_equal(result.candidate_indices, expected)
     np.testing.assert_allclose(result.seed_totals, totals)

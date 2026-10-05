@@ -35,8 +35,10 @@ reverse-mode differentiable.
    temporary pairwise kernel array; log-sum-exp preserves far-tail values.
 3. KDE resampling uses cumulative mixture weights and inverse-CDF lookup. It
    avoids allocating one categorical Gumbel score per (draw, center) pair.
-4. SGM sorts once and terminates each seed scan when its partition is full.
-   Bounded seed batches avoid a seeds-by-candidates conflict matrix. This has
+4. SGM sorts once and supports terminating a seed scan when its partition is full.
+   Full scans are the default; early stopping is opt-in because the benchmark
+   showed version-dependent performance. Bounded seed batches avoid a
+   seeds-by-candidates conflict matrix. Both strategies have
    exactly the same selected blocks and totals as the full-scan algorithm under
    the documented tie policy; tests compare to a direct Python reference.
 5. Target log densities and proposal log densities are computed once per draw;
@@ -79,6 +81,10 @@ Blossom/ILP optimization, or normalize rejected/truncated KDE proposals. Out-of-
 support target evaluations remain -inf and their proposal draws are retained.
 Periodic coordinates need an appropriate representation supplied by the caller.
 Constant dimensions must be removed; singular blocks need an explicit ridge.
+Singularity is checked on the correlation matrix before Cholesky, so numerical
+rounding cannot make an exactly collinear block appear valid. Numerically singular
+blocks (minimum correlation eigenvalue <= machine epsilon times block size) are
+rejected as well. Continuous KDE state arrays use a common promoted dtype.
 Candidate enumeration scales as choose(d,L), while full KDE TC scoring costs
 roughly O(choose(d,L)*n^2*L). JAX does not eliminate that combinatorial cost.
 Order is limited to 1..9, with default 2. The all-seed default can be expensive;

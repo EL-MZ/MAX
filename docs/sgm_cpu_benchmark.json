@@ -1,0 +1,39 @@
+{
+  "commit": "ee5e10f9a9d1635b7acc3e2ed3034da1fdd71797",
+  "run_url": "https://github.com/EL-MZ/MAX/actions/runs/37264635932",
+  "note": "Initial early-stop comparison; full scanning was subsequently kept as the default because performance varied by JAX version.",
+  "results": [
+    {
+      "jax_version": "0.4.35",
+      "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+      "device": "TFRT_CPU_0",
+      "dimension": 30,
+      "order": 2,
+      "candidates": 435,
+      "seeds": 64,
+      "repeats": 20,
+      "reference_first_call_seconds": 0.37928799499999855,
+      "optimized_first_call_seconds": 0.44268712699999924,
+      "reference_warm_median_seconds": 0.008454153000002407,
+      "optimized_warm_median_seconds": 0.007840496499994742,
+      "warm_speedup": 1.0782675561436799,
+      "identical_selection": true
+    },
+    {
+      "jax_version": "0.11.2",
+      "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+      "device": "cpu:0",
+      "dimension": 30,
+      "order": 2,
+      "candidates": 435,
+      "seeds": 64,
+      "repeats": 20,
+      "reference_first_call_seconds": 0.3436177120000252,
+      "optimized_first_call_seconds": 0.3427637579999896,
+      "reference_warm_median_seconds": 0.000781770499983736,
+      "optimized_warm_median_seconds": 0.0009911419999895088,
+      "warm_speedup": 0.788757312264046,
+      "identical_selection": true
+    }
+  ]
+}

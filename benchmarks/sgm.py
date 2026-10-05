@@ -36,7 +36,9 @@ def full_scan_reference(blocks, scores, *, dimension, n_seeds):
 
             def accept(_):
                 return (
-                    count + 1, used.at[block].set(True), selected.at[count].set(index),
+                    count + 1,
+                    used.at[block].set(True),
+                    selected.at[count].set(index),
                     total + scores[index],
                 )
 
@@ -83,15 +85,22 @@ def main():
         args.repeats,
     )
     optimized, optimized_first, optimized_warm = time_call(
-        lambda: sgm_kernel(blocks, scores, dimension=args.dimension, n_seeds=seeds),
+        lambda: sgm_kernel(
+            blocks, scores, dimension=args.dimension, n_seeds=seeds, early_stop=True
+        ),
         args.repeats,
     )
     np.testing.assert_array_equal(reference[0], optimized.candidate_indices)
     np.testing.assert_allclose(reference[1], optimized.seed_totals, rtol=1e-12)
     report = {
-        "jax_version": jax.__version__, "platform": platform.platform(),
-        "device": str(jax.devices()[0]), "dimension": args.dimension, "order": args.order,
-        "candidates": len(blocks), "seeds": seeds, "repeats": args.repeats,
+        "jax_version": jax.__version__,
+        "platform": platform.platform(),
+        "device": str(jax.devices()[0]),
+        "dimension": args.dimension,
+        "order": args.order,
+        "candidates": len(blocks),
+        "seeds": seeds,
+        "repeats": args.repeats,
         "reference_first_call_seconds": reference_first,
         "optimized_first_call_seconds": optimized_first,
         "reference_warm_median_seconds": reference_warm,

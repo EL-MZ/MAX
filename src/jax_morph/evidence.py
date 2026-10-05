@@ -22,16 +22,26 @@ class EvidenceResult(NamedTuple):
 
 def _evaluate(log_density, points, chunk_size):
     evaluate_batch = jax.jit(jax.vmap(log_density))
-    results = [evaluate_batch(points[start:start + chunk_size]) for start in (
-        range(0, len(points), chunk_size)
-    )]
+    results = [
+        evaluate_batch(points[start : start + chunk_size])
+        for start in (range(0, len(points), chunk_size))
+    ]
     return jnp.concatenate(results)
 
 
 def estimate_evidence(
-    samples, log_density, key, *, n_proposal=None, fit_fraction=0.5,
-    posterior_log_density=None, posterior_iat=None, rtol=1e-6,
-    max_iterations=1000, evaluation_chunk_size=128, **fit_options,
+    samples,
+    log_density,
+    key,
+    *,
+    n_proposal=None,
+    fit_fraction=0.5,
+    posterior_log_density=None,
+    posterior_iat=None,
+    rtol=1e-6,
+    max_iterations=1000,
+    evaluation_chunk_size=128,
+    **fit_options,
 ):
     """MorphZ using equal-weight, post-burn-in posterior draws (n, d).
 
@@ -71,8 +81,13 @@ def estimate_evidence(
     posterior_proposal = log_prob(fitted.state, held_out, chunk_size=evaluation_chunk_size)
     proposal_proposal = log_prob(fitted.state, proposals, chunk_size=evaluation_chunk_size)
     bridge = bridge_sampling(
-        posterior_target, posterior_proposal, proposal_target, proposal_proposal,
-        posterior_iat=posterior_iat, rtol=rtol, max_iterations=max_iterations,
+        posterior_target,
+        posterior_proposal,
+        proposal_target,
+        proposal_proposal,
+        posterior_iat=posterior_iat,
+        rtol=rtol,
+        max_iterations=max_iterations,
     )
     return EvidenceResult(
         bridge, fitted, proposals, jnp.arange(split), jnp.arange(split, len(samples)), evaluations

@@ -36,14 +36,15 @@ def integrated_autocorrelation_time(values):
     fit used by Gronau et al.; it is an explicit implementation choice.
     """
     count = values.size
-    centered = values - jnp.mean(values)
+    offsets = values - values[0]
+    centered = offsets - jnp.mean(offsets)
     fft_size = 1 << (2 * count - 1).bit_length()
     transform = jnp.fft.rfft(centered, n=fft_size)
     covariance = jnp.fft.irfft(transform * jnp.conj(transform), n=fft_size)[:count] / count
     denominator = jnp.where(covariance[0] > 0, covariance[0], 1.0)
     correlations = covariance / denominator
     pair_count = (count - 1) // 2
-    pairs = correlations[1:1 + 2 * pair_count].reshape(-1, 2).sum(axis=1)
+    pairs = correlations[1 : 1 + 2 * pair_count].reshape(-1, 2).sum(axis=1)
     retained = jnp.cumprod((pairs > 0).astype(values.dtype))
     tau = 1 + 2 * jnp.sum(pairs * retained)
     return jnp.where(covariance[0] > 0, jnp.clip(tau, 1, count), 1.0)
@@ -51,8 +52,14 @@ def integrated_autocorrelation_time(values):
 
 @partial(jax.jit, static_argnames=("max_iterations", "estimate_iat"))
 def bridge_kernel(
-    posterior_log_ratios, proposal_log_ratios, *, initial_log_evidence,
-    rtol=1e-6, max_iterations=1000, posterior_iat=1.0, estimate_iat=False,
+    posterior_log_ratios,
+    proposal_log_ratios,
+    *,
+    initial_log_evidence,
+    rtol=1e-6,
+    max_iterations=1000,
+    posterior_iat=1.0,
+    estimate_iat=False,
 ):
     """Unchecked, jittable solver. Ratios are log(unnormalized target/proposal).
 
@@ -79,9 +86,7 @@ def bridge_kernel(
         numerator = _log_mean_exp(
             normalized_g - jnp.logaddexp(log_fraction_p + normalized_g, log_fraction_g)
         )
-        denominator = _log_mean_exp(
-            -jnp.logaddexp(log_fraction_p + normalized_p, log_fraction_g)
-        )
+        denominator = _log_mean_exp(-jnp.logaddexp(log_fraction_p + normalized_p, log_fraction_g))
         new_log_z = log_z + numerator - denominator
         history = history.at[iteration + 1].set(new_log_z)
         return iteration + 1, new_log_z, jnp.abs(new_log_z - log_z), history
@@ -89,28 +94,39 @@ def bridge_kernel(
     iterations, log_z, difference, history = jax.lax.while_loop(unfinished, update, initial)
     converged = jnp.isfinite(log_z) & (difference <= jnp.log1p(rtol))
     normalized_g, normalized_p = proposal_log_ratios - log_z, posterior_log_ratios - log_z
-    f1 = jnp.exp(
-        normalized_g - jnp.logaddexp(log_fraction_p + normalized_g, log_fraction_g)
-    )
+    f1 = jnp.exp(normalized_g - jnp.logaddexp(log_fraction_p + normalized_g, log_fraction_g))
     f2 = jnp.exp(-jnp.logaddexp(log_fraction_p + normalized_p, log_fraction_g))
     tau = integrated_autocorrelation_time(f2) if estimate_iat else jnp.asarray(posterior_iat)
-    relative_variance = (
-        jnp.var(f1, ddof=1) / (n_proposal * jnp.mean(f1)**2)
-        + tau * jnp.var(f2, ddof=1) / (n_posterior * jnp.mean(f2)**2)
-    )
+    relative_variance = jnp.var(f1, ddof=1) / (n_proposal * jnp.mean(f1) ** 2) + tau * jnp.var(
+        f2, ddof=1
+    ) / (n_posterior * jnp.mean(f2) ** 2)
     relative_error = jnp.where(converged, jnp.sqrt(relative_variance), jnp.nan)
     importance_ess = jnp.exp(
         2 * logsumexp(proposal_log_ratios) - logsumexp(2 * proposal_log_ratios)
     )
     return BridgeResult(
-        log_z, relative_error, tau, jnp.exp(log_fraction_g) * jnp.mean(f2),
-        jnp.exp(log_fraction_p) * jnp.mean(f1), importance_ess, iterations, converged, history,
+        log_z,
+        relative_error,
+        tau,
+        jnp.exp(log_fraction_g) * jnp.mean(f2),
+        jnp.exp(log_fraction_p) * jnp.mean(f1),
+        importance_ess,
+        iterations,
+        converged,
+        history,
     )
 
 
 def bridge_sampling(
-    log_target_posterior, log_proposal_posterior, log_target_proposal, log_proposal_proposal,
-    *, initial_log_evidence=None, rtol=1e-6, max_iterations=1000, posterior_iat=None,
+    log_target_posterior,
+    log_proposal_posterior,
+    log_target_proposal,
+    log_proposal_proposal,
+    *,
+    initial_log_evidence=None,
+    rtol=1e-6,
+    max_iterations=1000,
+    posterior_iat=None,
 ):
     """Estimate log Z from equal-weight posterior and independent proposal draws.
 
@@ -120,9 +136,15 @@ def bridge_sampling(
     sequence. Relative error is a conditional Monte Carlo diagnostic, not a
     guarantee of posterior coverage or an assessment of fitting uncertainty.
     """
-    arrays = tuple(np.asarray(value) for value in (
-        log_target_posterior, log_proposal_posterior, log_target_proposal, log_proposal_proposal
-    ))
+    arrays = tuple(
+        np.asarray(value)
+        for value in (
+            log_target_posterior,
+            log_proposal_posterior,
+            log_target_proposal,
+            log_proposal_proposal,
+        )
+    )
     if any(value.ndim != 1 or value.size < 2 for value in arrays):
         raise ValueError("log-density arrays must be one-dimensional with at least two draws")
     target_p, proposal_p, target_g, proposal_g = arrays
@@ -139,17 +161,23 @@ def bridge_sampling(
     positive_integer(max_iterations, "max_iterations")
     if posterior_iat is not None and (not np.isfinite(posterior_iat) or posterior_iat < 1):
         raise ValueError("posterior_iat must be finite and >= 1")
-    posterior_ratios, proposal_ratios = jnp.asarray(target_p - proposal_p), jnp.asarray(
-        target_g - proposal_g
+    posterior_ratios, proposal_ratios = (
+        jnp.asarray(target_p - proposal_p),
+        jnp.asarray(target_g - proposal_g),
     )
-    initial = _log_mean_exp(proposal_ratios) if initial_log_evidence is None else jnp.asarray(
-        initial_log_evidence
+    initial = (
+        _log_mean_exp(proposal_ratios)
+        if initial_log_evidence is None
+        else jnp.asarray(initial_log_evidence)
     )
     if not np.isfinite(np.asarray(initial)).all() or initial.ndim != 0:
         raise ValueError("initial_log_evidence must be a finite scalar")
     return bridge_kernel(
-        posterior_ratios, proposal_ratios, initial_log_evidence=initial,
-        rtol=rtol, max_iterations=max_iterations,
+        posterior_ratios,
+        proposal_ratios,
+        initial_log_evidence=initial,
+        rtol=rtol,
+        max_iterations=max_iterations,
         posterior_iat=1.0 if posterior_iat is None else posterior_iat,
         estimate_iat=posterior_iat is None,
     )
