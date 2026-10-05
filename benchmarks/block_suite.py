@@ -197,8 +197,11 @@ def save_case_plots(target, evaluation, states, draws, output):
         handles = [Line2D([0], [0], color="#202124", label="Independent truth draw")]
         handles.extend(Line2D([0], [0], color=COLORS[o], label=f"Morph order {o}") for o in draws)
         fig.legend(
-            handles=handles, loc="lower center", bbox_to_anchor=(0.5, 1.01),
-            ncol=2 if len(indices) < 4 else 4, fontsize=10,
+            handles=handles,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.01),
+            ncol=2 if len(indices) < 4 else 4,
+            fontsize=10,
         )
         fig.suptitle(
             f"{target.name} | {target.dimension}D | page {page} | 1,000 draws",
@@ -222,7 +225,8 @@ def save_case_plots(target, evaluation, states, draws, output):
     fig.suptitle(f"{target.name} | {target.dimension}D | same-factor adjacency", y=1.05)
     fig.savefig(
         output / f"blocks_{target.name}_{target.dimension:02d}d.png",
-        dpi=150, bbox_inches="tight",
+        dpi=150,
+        bbox_inches="tight",
     )
     plt.close(fig)
 
