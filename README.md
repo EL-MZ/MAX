@@ -49,6 +49,8 @@ is the default. `order=2` fits pairs and any residual singleton; `order=1` fits
 independent marginals. Factors must have fewer than ten dimensions. All candidate
 blocks are scored; `max_candidates` prevents accidental combinatorial allocation.
 SGM is a heuristic, not an exact matching algorithm.
+`sgm_early_stop=True` enables an equivalent early-exit scan; benchmark it on your
+device before enabling it, since it is not consistently faster across JAX versions.
 
 For cheaper block scoring, explicitly set `max_tc_samples=256` and provide a
 `key`. This uses a reproducible subset for total correlation only; the selected

@@ -23,9 +23,7 @@ def test_silverman_matches_scipy(dimension, weighted):
     # in SciPy versions whose logpdf kernel does not handle log(0) weights.
     positive = np.ones(len(samples), dtype=bool) if weights is None else weights > 0
     reference_weights = None if weights is None else weights[positive]
-    reference = gaussian_kde(
-        samples[positive].T, weights=reference_weights, bw_method="silverman"
-    )
+    reference = gaussian_kde(samples[positive].T, weights=reference_weights, bw_method="silverman")
     np.testing.assert_allclose(state.cholesky @ state.cholesky.T, reference.covariance)
     np.testing.assert_allclose(
         kde_log_prob(state, points, chunk_size=7), reference.logpdf(points.T)

@@ -61,6 +61,7 @@ def fit(
     chunk_size=128,
     candidate_batch_size=1,
     seed_batch_size=16,
+    sgm_early_stop=False,
     max_candidates=100_000,
 ):
     """Fit a Morph approximation; return numerical state and selection trace.
@@ -101,6 +102,7 @@ def fit(
             dimension=dimension,
             n_seeds=n_seeds,
             seed_batch_size=seed_batch_size,
+            early_stop=sgm_early_stop,
         )
         chosen = tuple(tuple(map(int, block)) for block in np.asarray(selection.blocks))
         used = {index for block in chosen for index in block}

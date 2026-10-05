@@ -85,7 +85,9 @@ def main():
         args.repeats,
     )
     optimized, optimized_first, optimized_warm = time_call(
-        lambda: sgm_kernel(blocks, scores, dimension=args.dimension, n_seeds=seeds),
+        lambda: sgm_kernel(
+            blocks, scores, dimension=args.dimension, n_seeds=seeds, early_stop=True
+        ),
         args.repeats,
     )
     np.testing.assert_array_equal(reference[0], optimized.candidate_indices)

@@ -26,4 +26,28 @@ The local Windows runtime initially had NumPy but no JAX, SciPy, or pytest.
 Dependency installation was blocked by socket/network restrictions. Local Python
 syntax compilation is possible; numerical execution is delegated to the PR's
 GitHub Actions workflow on Python 3.10/JAX 0.4.35 and Python 3.12/current JAX.
-Actual run results and any required fixes will be recorded before delivery.
+The first numerical run caught rounding-sensitive covariance singularity and
+constant-chain centering behavior across JAX versions. Both were corrected by
+stable centering and an explicit correlation-eigenvalue check. SciPy reference
+KDEs exclude zero-weight centers, which contribute no mixture mass, to avoid a
+reference logpdf NaN issue in SciPy. On commit ee5e10f, all 43 numerical tests,
+the conjugate Gaussian example, lint, and the SGM benchmark passed on both
+JAX 0.4.35 and 0.11.2. Subsequent checks also exercise both SGM scan strategies.
+
+## Initial CPU benchmark
+
+[GitHub Actions run 37264635932](https://github.com/EL-MZ/MAX/actions/runs/37264635932),
+commit ee5e10f, d=30, L=2, 435 candidates, K=64, 20 synchronized warm repetitions:
+
+| JAX | Full scan median | Early-stop median | Full / early speed ratio |
+| --- | ---: | ---: | ---: |
+| 0.4.35 | 8.454 ms | 7.840 ms | 1.078 |
+| 0.11.2 | 0.782 ms | 0.991 ms | 0.789 |
+
+Both returned identical selected blocks and seed totals. Early stopping was kept
+as an explicit option after this mixed result; full scanning is the default.
+These single-run CPU measurements are workload-specific and do not establish
+general speedups. The JSON report also records compilation/first-call costs.
+
+The conjugate Gaussian example had exact log Z = -5.458274. The estimates were
+-5.456247 (JAX 0.4.35, RE=0.004424) and -5.459431 (JAX 0.11.2, RE=0.004784).

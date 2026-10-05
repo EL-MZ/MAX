@@ -35,8 +35,10 @@ reverse-mode differentiable.
    temporary pairwise kernel array; log-sum-exp preserves far-tail values.
 3. KDE resampling uses cumulative mixture weights and inverse-CDF lookup. It
    avoids allocating one categorical Gumbel score per (draw, center) pair.
-4. SGM sorts once and terminates each seed scan when its partition is full.
-   Bounded seed batches avoid a seeds-by-candidates conflict matrix. This has
+4. SGM sorts once and supports terminating a seed scan when its partition is full.
+   Full scans are the default; early stopping is opt-in because the benchmark
+   showed version-dependent performance. Bounded seed batches avoid a
+   seeds-by-candidates conflict matrix. Both strategies have
    exactly the same selected blocks and totals as the full-scan algorithm under
    the documented tie policy; tests compare to a direct Python reference.
 5. Target log densities and proposal log densities are computed once per draw;
