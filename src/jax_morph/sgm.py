@@ -73,7 +73,9 @@ def _greedy_seed(seed, sorted_blocks, sorted_scores, dimension, early_stop):
     if early_stop:
         final = jax.lax.while_loop(unfinished, scan_candidate, initial)
     else:
-        final = jax.lax.fori_loop(0, candidate_count, lambda _, carry: scan_candidate(carry), initial)
+        final = jax.lax.fori_loop(
+            0, candidate_count, lambda _, carry: scan_candidate(carry), initial
+        )
     _, _, _, selected, total = final
     return selected, total
 
