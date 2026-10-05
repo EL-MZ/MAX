@@ -41,6 +41,7 @@ jobs:
           'matplotlib==3.9.2' 'corner==2.2.3' 'pytest==8.3.3' 'ruff==0.8.6'
       - name: Format benchmark additions
         run: |
+          ruff format benchmarks/block_suite.py benchmarks/distributions.py tests/test_benchmark_distributions.py
           ruff check --fix benchmarks/block_suite.py benchmarks/distributions.py tests/test_benchmark_distributions.py
           ruff format benchmarks/block_suite.py benchmarks/distributions.py tests/test_benchmark_distributions.py
       - name: Validate code and analytic targets

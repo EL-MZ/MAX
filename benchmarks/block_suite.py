@@ -297,8 +297,8 @@ def metadata():
             "shape compilations. Warm fit repeats include host validation, TC, SGM, and KDE "
             "fit; density and sample medians use three repeats, SGM five. CPU results only."
         ),
-        "kl_note": "Raw unclipped forward KL, MC SE conditional on fitted model; independent evaluation",
-        "corner_note": "Six-dimensional pages cover every coordinate; plotting limits use 0.5%-99.5% quantiles only",
+        "kl_note": "Raw forward KL; MC SE conditional on fitted model; independent evaluation",
+        "corner_note": "Six-dimensional pages cover every coordinate; 0.5%-99.5% plot limits",
     }
 
 
@@ -357,7 +357,7 @@ def write_readme(records, output):
         "",
         "Corner plots overlay the independent truth draw and all three Morph orders.",
         "Pages contain at most six parameters and together cover every parameter.",
-        "Coordinates are displayed in true-block order for readability; fitting used shuffled columns.",
+        "Coordinates are displayed in true-block order; fitting used shuffled columns.",
         "Quantile limits affect plotting only. Full-support samples enter KL and diagnostics.",
         "",
     ]
@@ -376,7 +376,7 @@ def write_readme(records, output):
         "",
         "`results.json` contains configurations, all partitions, hardware, dependency versions,",
         "implementation hashes, first and warm timings, support leakage, and importance ESS.",
-        "`metrics.csv` provides the scalar results. `targets.json` records exact target parameters.",
+        "`metrics.csv` contains scalar results; `targets.json` records exact target parameters.",
         "The workflow pins dependencies in `.github/workflows/block-benchmarks.yml`.",
         "First-call timings may reuse compiled shapes from earlier cases; they are not isolated",
         "compiler timings. Warm fits include scoring and selection; SGM-only times are separate.",
