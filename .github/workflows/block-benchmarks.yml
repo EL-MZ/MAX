@@ -7,6 +7,7 @@ on:
       - 'benchmarks/**'
       - 'src/jax_morph/**'
       - 'tests/test_benchmark_distributions.py'
+      - 'pyproject.toml'
       - '.github/workflows/block-benchmarks.yml'
   workflow_dispatch:
 
@@ -44,6 +45,13 @@ jobs:
           ruff format benchmarks/block_suite.py benchmarks/distributions.py tests/test_benchmark_distributions.py
           ruff check --fix benchmarks/block_suite.py benchmarks/distributions.py tests/test_benchmark_distributions.py
           ruff format benchmarks/block_suite.py benchmarks/distributions.py tests/test_benchmark_distributions.py
+      - name: Save formatted benchmark code
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add benchmarks tests/test_benchmark_distributions.py
+          git diff --cached --quiet || git commit -m 'Format benchmark sources [skip ci]'
+          git push origin HEAD:${GITHUB_REF_NAME}
       - name: Validate code and analytic targets
         run: |
           ruff check .
