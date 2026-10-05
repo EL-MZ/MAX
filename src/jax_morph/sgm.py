@@ -58,7 +58,9 @@ def _greedy_seed(seed, sorted_blocks, sorted_scores, dimension):
 
         def accept(_):
             return (
-                count + 1, used.at[block].set(True), selected.at[count].set(cursor),
+                count + 1,
+                used.at[block].set(True),
+                selected.at[count].set(cursor),
                 total + sorted_scores[cursor],
             )
 
@@ -87,9 +89,7 @@ def sgm_kernel(blocks, scores, *, dimension, n_seeds, seed_batch_size=16):
     )
     best_seed = jnp.argmax(totals)
     indices = permutation[selected[best_seed]]
-    return SGMResult(
-        blocks[indices], indices, totals[best_seed], permutation[best_seed], totals
-    )
+    return SGMResult(blocks[indices], indices, totals[best_seed], permutation[best_seed], totals)
 
 
 def seeded_greedy_maximization(blocks, scores, *, dimension, n_seeds=None, seed_batch_size=16):
@@ -108,7 +108,8 @@ def seeded_greedy_maximization(blocks, scores, *, dimension, n_seeds=None, seed_
         raise ValueError("blocks must contain integer dimension indices with 1 <= order <= d")
     canonical = np.sort(blocks_np, axis=1)
     if (
-        np.any(canonical < 0) or np.any(canonical >= dimension)
+        np.any(canonical < 0)
+        or np.any(canonical >= dimension)
         or np.any(np.diff(canonical, axis=1) == 0)
         or len(np.unique(canonical, axis=0)) != comb(dimension, order)
         or len(canonical) != comb(dimension, order)
@@ -121,6 +122,9 @@ def seeded_greedy_maximization(blocks, scores, *, dimension, n_seeds=None, seed_
     n_seeds = len(canonical) if n_seeds is None else positive_integer(n_seeds, "n_seeds")
     n_seeds = min(n_seeds, len(canonical))
     return sgm_kernel(
-        jnp.asarray(blocks_np), jnp.asarray(scores_np, dtype=jnp.result_type(scores_np, 1.0)),
-        dimension=dimension, n_seeds=n_seeds, seed_batch_size=seed_batch_size,
+        jnp.asarray(blocks_np),
+        jnp.asarray(scores_np, dtype=jnp.result_type(scores_np, 1.0)),
+        dimension=dimension,
+        n_seeds=n_seeds,
+        seed_batch_size=seed_batch_size,
     )

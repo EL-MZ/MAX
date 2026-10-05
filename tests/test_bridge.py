@@ -26,8 +26,10 @@ def test_bounded_target_keeps_proposals_outside_support():
     proposal = rng.normal(0.35, 0.2, 6000)
     log_z = betaln(3, 6)
     result = bridge_sampling(
-        beta.logpdf(posterior, 3, 6) + log_z, norm.logpdf(posterior, 0.35, 0.2),
-        beta.logpdf(proposal, 3, 6) + log_z, norm.logpdf(proposal, 0.35, 0.2),
+        beta.logpdf(posterior, 3, 6) + log_z,
+        norm.logpdf(posterior, 0.35, 0.2),
+        beta.logpdf(proposal, 3, 6) + log_z,
+        norm.logpdf(proposal, 0.35, 0.2),
         posterior_iat=1,
     )
     assert np.isneginf(beta.logpdf(proposal, 3, 6)).any()
@@ -64,9 +66,12 @@ def test_no_overlap_nonconvergence_and_invalid_values():
         bridge_sampling(zeros, zeros, np.full(20, np.nan), zeros)
     points = np.linspace(-2, 2, 20)
     result = bridge_sampling(
-        norm.logpdf(points), norm.logpdf(points, scale=2),
-        norm.logpdf(2 * points), norm.logpdf(2 * points, scale=2),
-        initial_log_evidence=10, max_iterations=1,
+        norm.logpdf(points),
+        norm.logpdf(points, scale=2),
+        norm.logpdf(2 * points),
+        norm.logpdf(2 * points, scale=2),
+        initial_log_evidence=10,
+        max_iterations=1,
     )
     assert not result.converged
     assert np.isnan(result.relative_error)
@@ -84,8 +89,13 @@ def test_end_to_end_beta_evidence_with_cached_target():
 
     cached = 2 * np.log(samples[:, 0]) + 5 * np.log1p(-samples[:, 0])
     result = estimate_evidence(
-        samples, log_density, jax.random.key(41), order=1, n_proposal=1200,
-        posterior_log_density=cached, posterior_iat=1,
+        samples,
+        log_density,
+        jax.random.key(41),
+        order=1,
+        n_proposal=1200,
+        posterior_log_density=cached,
+        posterior_iat=1,
     )
     assert result.bridge.converged
     assert abs(result.bridge.log_evidence - betaln(3, 6)) < 0.04
@@ -103,7 +113,11 @@ def test_end_to_end_correlated_gaussian():
         return -0.5 * point @ precision @ point - log_normalizer + 2.3
 
     result = estimate_evidence(
-        samples, log_density, jax.random.key(2), max_tc_samples=160, posterior_iat=1,
+        samples,
+        log_density,
+        jax.random.key(2),
+        max_tc_samples=160,
+        posterior_iat=1,
     )
     assert result.bridge.converged
     assert abs(result.bridge.log_evidence - 2.3) < 0.05

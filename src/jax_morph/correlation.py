@@ -20,7 +20,13 @@ class CorrelationResult(NamedTuple):
 
 @partial(jax.jit, static_argnames=("chunk_size", "candidate_batch_size"))
 def _correlation_kernel(
-    samples, weights, blocks, bandwidth_scale, regularization, *, chunk_size,
+    samples,
+    weights,
+    blocks,
+    bandwidth_scale,
+    regularization,
+    *,
+    chunk_size,
     candidate_batch_size,
 ):
     def marginal_log_density(index):
@@ -38,15 +44,24 @@ def _correlation_kernel(
         return weights @ (joint_logs - jnp.sum(marginal_logs[:, block], axis=1))
 
     raw_scores = jax.lax.map(
-        total_correlation, blocks,
+        total_correlation,
+        blocks,
         batch_size=min(candidate_batch_size, blocks.shape[0]),
     )
     return raw_scores, -(weights @ marginal_logs)
 
 
 def estimate_total_correlations(
-    samples, blocks, weights=None, *, bandwidth_scale=1.0, regularization=0.0,
-    max_samples=None, key=None, chunk_size=128, candidate_batch_size=1,
+    samples,
+    blocks,
+    weights=None,
+    *,
+    bandwidth_scale=1.0,
+    regularization=0.0,
+    max_samples=None,
+    key=None,
+    chunk_size=128,
+    candidate_batch_size=1,
 ):
     """Estimate E[log KDE(block) - sum(log KDE(singleton))] on fit data.
 
@@ -60,9 +75,11 @@ def estimate_total_correlations(
     positive_integer(candidate_batch_size, "candidate_batch_size")
     blocks = np.asarray(blocks)
     if (
-        blocks.ndim != 2 or min(blocks.shape) < 1
+        blocks.ndim != 2
+        or min(blocks.shape) < 1
         or not np.issubdtype(blocks.dtype, np.integer)
-        or np.any(blocks < 0) or np.any(blocks >= samples.shape[1])
+        or np.any(blocks < 0)
+        or np.any(blocks >= samples.shape[1])
         or np.any(np.diff(np.sort(blocks, axis=1), axis=1) == 0)
     ):
         raise ValueError("blocks must contain distinct, valid dimension indices")
@@ -77,14 +94,21 @@ def estimate_total_correlations(
     # Validate bandwidth/ridge and marginal variance before entering the core.
     for index in range(samples.shape[1]):
         fit_kde(
-            samples[:, index, None], weights, bandwidth_scale=bandwidth_scale,
+            samples[:, index, None],
+            weights,
+            bandwidth_scale=bandwidth_scale,
             regularization=regularization,
         )
     if np.count_nonzero(weights) <= blocks.shape[1]:
         raise ValueError("TC scoring needs more positive-weight samples than block dimensions")
     raw, entropies = _correlation_kernel(
-        jnp.asarray(samples), jnp.asarray(weights), jnp.asarray(blocks), bandwidth_scale,
-        regularization, chunk_size=chunk_size, candidate_batch_size=candidate_batch_size,
+        jnp.asarray(samples),
+        jnp.asarray(weights),
+        jnp.asarray(blocks),
+        bandwidth_scale,
+        regularization,
+        chunk_size=chunk_size,
+        candidate_batch_size=candidate_batch_size,
     )
     if not np.isfinite(np.asarray(raw)).all():
         raise ValueError("nonfinite TC scores: check block covariance or set regularization > 0")

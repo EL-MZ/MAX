@@ -49,9 +49,19 @@ class MorphFit(NamedTuple):
 
 
 def fit(
-    samples, weights=None, *, order=2, n_seeds=None, bandwidth_scale=1.0,
-    regularization=0.0, max_tc_samples=None, key=None, chunk_size=128,
-    candidate_batch_size=1, seed_batch_size=16, max_candidates=100_000,
+    samples,
+    weights=None,
+    *,
+    order=2,
+    n_seeds=None,
+    bandwidth_scale=1.0,
+    regularization=0.0,
+    max_tc_samples=None,
+    key=None,
+    chunk_size=128,
+    candidate_batch_size=1,
+    seed_batch_size=16,
+    max_candidates=100_000,
 ):
     """Fit a Morph approximation; return numerical state and selection trace.
 
@@ -75,12 +85,21 @@ def fit(
         tc_sample_count = 0
     else:
         correlations = estimate_total_correlations(
-            samples, candidates, weights, bandwidth_scale=bandwidth_scale,
-            regularization=regularization, max_samples=max_tc_samples, key=key,
-            chunk_size=chunk_size, candidate_batch_size=candidate_batch_size,
+            samples,
+            candidates,
+            weights,
+            bandwidth_scale=bandwidth_scale,
+            regularization=regularization,
+            max_samples=max_tc_samples,
+            key=key,
+            chunk_size=chunk_size,
+            candidate_batch_size=candidate_batch_size,
         )
         selection = seeded_greedy_maximization(
-            candidates, correlations.scores, dimension=dimension, n_seeds=n_seeds,
+            candidates,
+            correlations.scores,
+            dimension=dimension,
+            n_seeds=n_seeds,
             seed_batch_size=seed_batch_size,
         )
         chosen = tuple(tuple(map(int, block)) for block in np.asarray(selection.blocks))
@@ -89,20 +108,30 @@ def fit(
         blocks = chosen + singletons
         raw_scores, scores = correlations.raw_scores, correlations.scores
         selected, total, seed_totals = (
-            selection.candidate_indices, selection.total_score, selection.seed_totals
+            selection.candidate_indices,
+            selection.total_score,
+            selection.seed_totals,
         )
         tc_sample_count = correlations.sample_count
     factors = tuple(
         fit_kde(
-            samples[:, block], weights, bandwidth_scale=bandwidth_scale,
+            samples[:, block],
+            weights,
+            bandwidth_scale=bandwidth_scale,
             regularization=regularization,
         )
         for block in blocks
     )
     state = MorphState(blocks, factors, dimension)
     diagnostics = FitDiagnostics(
-        candidates, raw_scores, scores, selected, total, seed_totals,
-        tc_sample_count, len(samples),
+        candidates,
+        raw_scores,
+        scores,
+        selected,
+        total,
+        seed_totals,
+        tc_sample_count,
+        len(samples),
     )
     return MorphFit(state, diagnostics)
 

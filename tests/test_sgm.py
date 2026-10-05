@@ -45,9 +45,9 @@ def test_ties_are_stable_and_kernel_accepts_traced_scores():
     blocks = candidate_blocks(7, 2)
     scores = np.zeros(len(blocks))
     expected, totals = reference_sgm(np.asarray(blocks), scores, 7, 4)
-    compiled = jax.jit(lambda values: sgm_kernel(
-        blocks, values, dimension=7, n_seeds=4, seed_batch_size=2
-    ))
+    compiled = jax.jit(
+        lambda values: sgm_kernel(blocks, values, dimension=7, n_seeds=4, seed_batch_size=2)
+    )
     result = compiled(scores)
     np.testing.assert_array_equal(result.candidate_indices, expected)
     np.testing.assert_allclose(result.seed_totals, totals)
