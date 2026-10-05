@@ -188,8 +188,11 @@ def save_case_plots(target, evaluation, states, draws, output):
         )
         for order in sorted(draws):
             corner.corner(
-                draws[order][:, indices], fig=fig, color=COLORS[order],
-                hist_kwargs={"density": True, "color": COLORS[order]}, **options,
+                draws[order][:, indices],
+                fig=fig,
+                color=COLORS[order],
+                hist_kwargs={"density": True, "color": COLORS[order]},
+                **options,
             )
         handles = [Line2D([0], [0], color="#202124", label="Independent truth draw")]
         handles.extend(Line2D([0], [0], color=COLORS[o], label=f"Morph order {o}") for o in draws)
@@ -399,7 +402,6 @@ def write_readme(records, output):
         "No GPU speed or speedup relative to the original MorphZ is inferred from this CPU run.",
     ]
     (output / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
 
 
 def replot_existing_results(output):
