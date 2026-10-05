@@ -1,0 +1,38 @@
+{
+  "workflow_run": "https://github.com/EL-MZ/MAX/actions/runs/37267305035",
+  "note": "Within-run comparisons of identical SGM selections; CI jobs may use different physical runners.",
+  "records": {
+    "tests (3.10, jax[cpu]==0.4.35)": {
+      "jax_version": "0.4.35",
+      "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+      "device": "TFRT_CPU_0",
+      "dimension": 30,
+      "order": 2,
+      "candidates": 435,
+      "seeds": 64,
+      "repeats": 20,
+      "reference_first_call_seconds": 0.4617531060000033,
+      "optimized_first_call_seconds": 0.4733104139999966,
+      "reference_warm_median_seconds": 0.007959810500004494,
+      "optimized_warm_median_seconds": 0.008032882999998492,
+      "warm_speedup": 0.990903328232963,
+      "identical_selection": true
+    },
+    "tests (3.12, jax[cpu])": {
+      "jax_version": "0.11.2",
+      "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+      "device": "cpu:0",
+      "dimension": 30,
+      "order": 2,
+      "candidates": 435,
+      "seeds": 64,
+      "repeats": 20,
+      "reference_first_call_seconds": 0.4662381450000055,
+      "optimized_first_call_seconds": 0.5439851499999975,
+      "reference_warm_median_seconds": 0.0012534739999949807,
+      "optimized_warm_median_seconds": 0.0016716470000091022,
+      "warm_speedup": 0.7498437169977605,
+      "identical_selection": true
+    }
+  }
+}

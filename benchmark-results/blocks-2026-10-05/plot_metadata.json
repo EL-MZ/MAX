@@ -1,0 +1,7 @@
+{
+  "plot_generation_commit": "2d3e3e00fcfb3802570450b05841fcefe1f9f511",
+  "measurement_commit": "7074b80028b9ee21b84a5c51941ade3372acc064",
+  "verified_main_kl_records": 72,
+  "note": "Rebuilt from saved partitions and seeds; measured KL and timings unchanged.",
+  "style": "Colored histograms, contour overlays, accurate nonlinear labels"
+}

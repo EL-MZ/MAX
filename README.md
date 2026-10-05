@@ -1,5 +1,10 @@
 # MAX - Jax_Morph
 
+Block-distribution benchmarks, KL diagnostics, timings, and corner plots are
+described in [docs/block-benchmarks.md](docs/block-benchmarks.md).
+[Measured findings and plots](benchmark-results/blocks-2026-10-05/FINDINGS.md)
+cover block recovery, density errors, and CPU performance through 30 dimensions.
+
 JAX implementation of the Morph probability density approximation and the
 MorphZ post-processing Bayesian evidence estimator. The baseline follows
 [Zahraoui et al., Phys. Rev. D 113, 083014 (2026)](https://doi.org/10.1103/1554-y6ns).
