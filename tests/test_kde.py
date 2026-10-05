@@ -21,7 +21,9 @@ def test_silverman_matches_scipy(dimension, weighted):
     state = fit_kde(samples, weights)
     reference = gaussian_kde(samples.T, weights=weights, bw_method="silverman")
     np.testing.assert_allclose(state.cholesky @ state.cholesky.T, reference.covariance)
-    np.testing.assert_allclose(kde_log_prob(state, points, chunk_size=7), reference.logpdf(points.T))
+    np.testing.assert_allclose(
+        kde_log_prob(state, points, chunk_size=7), reference.logpdf(points.T)
+    )
     np.testing.assert_allclose(kde_log_prob(state, points[0]), reference.logpdf(points[0])[0])
     assert kde_log_prob(state, np.empty((0, dimension))).shape == (0,)
 

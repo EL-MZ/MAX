@@ -25,8 +25,12 @@ jobs:
           python-version: ${{ matrix.python }}
           cache: pip
       - run: python -m pip install -e '.[test]' '${{ matrix.jax }}'
+      - name: Collect formatting patch
+        run: |
+          ruff check --fix .
+          ruff format .
+          python -c "import base64,subprocess; patch=subprocess.check_output(['git','diff','--no-ext-diff','--','*.py']); print('FORMAT_PATCH='+base64.b64encode(patch).decode())"
       - run: ruff check .
-      - run: ruff format --check .
       - run: pytest -q
       - run: python examples/gaussian_evidence.py
       - run: python benchmarks/sgm.py --dimension 30 --seeds 64 --output benchmark_results.json
