@@ -70,6 +70,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -196,6 +197,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -322,6 +324,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -450,6 +453,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -537,11 +541,11 @@
       4
     ],
     "labels": [
-      "x2:norm",
+      "x2:banana",
       "x1:norm",
       "x3:norm",
-      "x6:norm",
-      "x4:norm",
+      "x6:banana",
+      "x4:banana",
       "x5:norm"
     ],
     "latent_correlations": [
@@ -576,6 +580,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -646,12 +651,12 @@
       2
     ],
     "labels": [
-      "x6:norm",
-      "x2:norm",
-      "x5:norm",
-      "x1:norm",
-      "x4:norm",
-      "x3:norm"
+      "x6:mixture",
+      "x2:mixture",
+      "x5:mixture",
+      "x1:mixture",
+      "x4:mixture",
+      "x3:mixture"
     ],
     "latent_correlations": [
       [
@@ -685,6 +690,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -860,6 +866,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -1087,6 +1094,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -1314,6 +1322,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -1545,6 +1554,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -1701,13 +1711,13 @@
       "x3:norm",
       "x7:norm",
       "x1:norm",
-      "x10:norm",
-      "x6:norm",
-      "x2:norm",
+      "x10:banana",
+      "x6:banana",
+      "x2:banana",
       "x5:norm",
-      "x4:norm",
-      "x12:norm",
-      "x8:norm",
+      "x4:banana",
+      "x12:banana",
+      "x8:banana",
       "x9:norm"
     ],
     "latent_correlations": [
@@ -1772,6 +1782,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -1890,18 +1901,18 @@
       1
     ],
     "labels": [
-      "x1:norm",
-      "x6:norm",
-      "x5:norm",
-      "x7:norm",
-      "x3:norm",
-      "x10:norm",
-      "x4:norm",
-      "x8:norm",
-      "x12:norm",
-      "x11:norm",
-      "x9:norm",
-      "x2:norm"
+      "x1:mixture",
+      "x6:mixture",
+      "x5:mixture",
+      "x7:mixture",
+      "x3:mixture",
+      "x10:mixture",
+      "x4:mixture",
+      "x8:mixture",
+      "x12:mixture",
+      "x11:mixture",
+      "x9:mixture",
+      "x2:mixture"
     ],
     "latent_correlations": [
       [
@@ -1965,6 +1976,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -2250,6 +2262,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -2612,6 +2625,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -2974,6 +2988,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -3342,6 +3357,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -3581,23 +3597,23 @@
       18
     ],
     "labels": [
-      "x20:norm",
-      "x18:norm",
+      "x20:banana",
+      "x18:banana",
       "x11:norm",
       "x1:norm",
-      "x12:norm",
-      "x4:norm",
+      "x12:banana",
+      "x4:banana",
       "x5:norm",
       "x13:norm",
-      "x8:norm",
-      "x14:norm",
-      "x2:norm",
-      "x10:norm",
+      "x8:banana",
+      "x14:banana",
+      "x2:banana",
+      "x10:banana",
       "x3:norm",
-      "x16:norm",
+      "x16:banana",
       "x7:norm",
       "x9:norm",
-      "x6:norm",
+      "x6:banana",
       "x15:norm",
       "x17:norm",
       "x19:norm"
@@ -3704,6 +3720,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -3886,26 +3903,26 @@
       9
     ],
     "labels": [
-      "x17:norm",
-      "x11:norm",
-      "x8:norm",
-      "x20:norm",
-      "x13:norm",
-      "x18:norm",
-      "x15:norm",
-      "x3:norm",
-      "x16:norm",
-      "x9:norm",
-      "x4:norm",
-      "x14:norm",
-      "x6:norm",
-      "x12:norm",
-      "x7:norm",
-      "x2:norm",
-      "x5:norm",
-      "x19:norm",
-      "x1:norm",
-      "x10:norm"
+      "x17:mixture",
+      "x11:mixture",
+      "x8:mixture",
+      "x20:mixture",
+      "x13:mixture",
+      "x18:mixture",
+      "x15:mixture",
+      "x3:mixture",
+      "x16:mixture",
+      "x9:mixture",
+      "x4:mixture",
+      "x14:mixture",
+      "x6:mixture",
+      "x12:mixture",
+      "x7:mixture",
+      "x2:mixture",
+      "x5:mixture",
+      "x19:mixture",
+      "x1:mixture",
+      "x10:mixture"
     ],
     "latent_correlations": [
       [
@@ -4009,6 +4026,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -4434,6 +4452,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -4965,6 +4984,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -5496,6 +5516,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -6037,6 +6058,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -6388,33 +6410,33 @@
       "x1:norm",
       "x21:norm",
       "x19:norm",
-      "x18:norm",
+      "x18:banana",
       "x7:norm",
       "x29:norm",
       "x23:norm",
       "x3:norm",
       "x11:norm",
       "x15:norm",
-      "x28:norm",
-      "x24:norm",
-      "x10:norm",
+      "x28:banana",
+      "x24:banana",
+      "x10:banana",
       "x5:norm",
-      "x22:norm",
-      "x6:norm",
+      "x22:banana",
+      "x6:banana",
       "x13:norm",
       "x25:norm",
-      "x8:norm",
-      "x20:norm",
-      "x2:norm",
-      "x12:norm",
+      "x8:banana",
+      "x20:banana",
+      "x2:banana",
+      "x12:banana",
       "x17:norm",
       "x27:norm",
-      "x16:norm",
+      "x16:banana",
       "x9:norm",
-      "x14:norm",
-      "x26:norm",
-      "x4:norm",
-      "x30:norm"
+      "x14:banana",
+      "x26:banana",
+      "x4:banana",
+      "x30:banana"
     ],
     "latent_correlations": [
       [
@@ -6568,6 +6590,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
@@ -6830,36 +6853,36 @@
       25
     ],
     "labels": [
-      "x29:norm",
-      "x20:norm",
-      "x5:norm",
-      "x16:norm",
-      "x28:norm",
-      "x8:norm",
-      "x24:norm",
-      "x10:norm",
-      "x25:norm",
-      "x3:norm",
-      "x4:norm",
-      "x12:norm",
-      "x6:norm",
-      "x30:norm",
-      "x23:norm",
-      "x18:norm",
-      "x19:norm",
-      "x9:norm",
-      "x17:norm",
-      "x14:norm",
-      "x11:norm",
-      "x22:norm",
-      "x15:norm",
-      "x13:norm",
-      "x21:norm",
-      "x2:norm",
-      "x1:norm",
-      "x27:norm",
-      "x7:norm",
-      "x26:norm"
+      "x29:mixture",
+      "x20:mixture",
+      "x5:mixture",
+      "x16:mixture",
+      "x28:mixture",
+      "x8:mixture",
+      "x24:mixture",
+      "x10:mixture",
+      "x25:mixture",
+      "x3:mixture",
+      "x4:mixture",
+      "x12:mixture",
+      "x6:mixture",
+      "x30:mixture",
+      "x23:mixture",
+      "x18:mixture",
+      "x19:mixture",
+      "x9:mixture",
+      "x17:mixture",
+      "x14:mixture",
+      "x11:mixture",
+      "x22:mixture",
+      "x15:mixture",
+      "x13:mixture",
+      "x21:mixture",
+      "x2:mixture",
+      "x1:mixture",
+      "x27:mixture",
+      "x7:mixture",
+      "x26:mixture"
     ],
     "latent_correlations": [
       [
@@ -7013,6 +7036,7 @@
         ]
       ]
     ],
+    "marginal_note": "Listed marginals apply to copula blocks and singleton tails. Banana and mixture pairs use the explicit joint parameters below.",
     "marginals": [
       {
         "distribution": "norm",
