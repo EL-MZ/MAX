@@ -23,6 +23,7 @@ precision in your application before constructing arrays for evidence work:
 
 ```python
 import jax
+
 jax.config.update("jax_enable_x64", True)
 ```
 
@@ -61,8 +62,10 @@ KDE factors still use all fitting samples. It can change the selected partition.
 ```python
 from jax_morph import estimate_evidence
 
+
 def log_density(theta):
     return log_likelihood(theta) + log_prior(theta)
+
 
 result = estimate_evidence(
     posterior_samples,
