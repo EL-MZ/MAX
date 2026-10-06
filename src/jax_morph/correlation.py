@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from ._progress import progress_map, validate_progress_every
 from ._validation import positive_integer, samples_and_weights
 from .kde import _fit_kde, fit_kde, kde_log_prob
 
@@ -18,7 +19,7 @@ class CorrelationResult(NamedTuple):
     sample_count: int
 
 
-@partial(jax.jit, static_argnames=("chunk_size", "candidate_batch_size"))
+@partial(jax.jit, static_argnames=("chunk_size", "candidate_batch_size", "progress_every"))
 def _correlation_kernel(
     samples,
     weights,
@@ -28,6 +29,7 @@ def _correlation_kernel(
     *,
     chunk_size,
     candidate_batch_size,
+    progress_every=0,
 ):
     def marginal_log_density(index):
         values = samples[:, index, None]
@@ -43,10 +45,12 @@ def _correlation_kernel(
         joint_logs = kde_log_prob(state, values, chunk_size=chunk_size)
         return weights @ (joint_logs - jnp.sum(marginal_logs[:, block], axis=1))
 
-    raw_scores = jax.lax.map(
+    raw_scores = progress_map(
         total_correlation,
         blocks,
         batch_size=min(candidate_batch_size, blocks.shape[0]),
+        progress_every=progress_every,
+        label="candidate scores",
     )
     return raw_scores, -(weights @ marginal_logs)
 
@@ -62,6 +66,7 @@ def estimate_total_correlations(
     key=None,
     chunk_size=128,
     candidate_batch_size=1,
+    progress_every=0,
 ):
     """Estimate E[log KDE(block) - sum(log KDE(singleton))] on fit data.
 
@@ -73,6 +78,7 @@ def estimate_total_correlations(
     samples, weights = samples_and_weights(samples, weights)
     positive_integer(chunk_size, "chunk_size")
     positive_integer(candidate_batch_size, "candidate_batch_size")
+    validate_progress_every(progress_every)
     blocks = np.asarray(blocks)
     if (
         blocks.ndim != 2
@@ -101,6 +107,8 @@ def estimate_total_correlations(
         )
     if np.count_nonzero(weights) <= blocks.shape[1]:
         raise ValueError("TC scoring needs more positive-weight samples than block dimensions")
+    if progress_every:
+        print(f"    candidate scores: 0/{len(blocks):,}", flush=True)
     raw, entropies = _correlation_kernel(
         jnp.asarray(samples),
         jnp.asarray(weights),
@@ -109,6 +117,7 @@ def estimate_total_correlations(
         regularization,
         chunk_size=chunk_size,
         candidate_batch_size=candidate_batch_size,
+        progress_every=progress_every,
     )
     if not np.isfinite(np.asarray(raw)).all():
         raise ValueError("nonfinite TC scores: check block covariance or set regularization > 0")

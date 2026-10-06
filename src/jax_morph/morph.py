@@ -63,6 +63,8 @@ def fit(
     seed_batch_size=16,
     sgm_early_stop=False,
     max_candidates=100_000,
+    candidate_progress_every=0,
+    seed_progress_every=0,
 ):
     """Fit a Morph approximation; return numerical state and selection trace.
 
@@ -95,6 +97,7 @@ def fit(
             key=key,
             chunk_size=chunk_size,
             candidate_batch_size=candidate_batch_size,
+            progress_every=candidate_progress_every,
         )
         selection = seeded_greedy_maximization(
             candidates,
@@ -103,6 +106,7 @@ def fit(
             n_seeds=n_seeds,
             seed_batch_size=seed_batch_size,
             early_stop=sgm_early_stop,
+            progress_every=seed_progress_every,
         )
         chosen = tuple(tuple(map(int, block)) for block in np.asarray(selection.blocks))
         used = {index for block in chosen for index in block}

@@ -27,7 +27,6 @@ jobs:
       JAX_ENABLE_X64: 'true'
       OMP_NUM_THREADS: '2'
       OPENBLAS_NUM_THREADS: '2'
-      PLOTS_ONLY: ${{ contains(github.event.head_commit.message, '[plots-only]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,22 +59,11 @@ jobs:
           pytest -q
       - name: Run block, density, and speed suite
         run: |
-          if [ "$PLOTS_ONLY" = "true" ]; then
-            python -m benchmarks.block_suite --replot-results --output benchmark-results/blocks-2026-10-05
-          else
-            python -m benchmarks.block_suite --dimensions 6 --scenarios independent_mixed banana_pairs --skip-ablations --output /tmp/morph-plot-check
-            python -m benchmarks.block_suite --output benchmark-results/blocks-2026-10-05
-          fi
+          python -m benchmarks.block_suite --dimensions 6 --scenarios independent_mixed banana_pairs --skip-ablations --output /tmp/morph-plot-check
+          python -m benchmarks.block_suite --output benchmark-results/blocks-2026-10-05
       - name: Preserve benchmark artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: block-benchmark-results
           path: benchmark-results/blocks-2026-10-05
-      - name: Commit and push measured results and images
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add benchmarks tests/test_benchmark_distributions.py benchmark-results/blocks-2026-10-05
-          git diff --cached --quiet || git commit -m 'Save measured block benchmarks, KL estimates, and corner plots [skip ci]'
-          git push origin HEAD:${GITHUB_REF_NAME}

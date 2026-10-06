@@ -13,6 +13,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from ._progress import progress_map, validate_progress_every
 from ._validation import positive_integer
 
 
@@ -80,8 +81,20 @@ def _greedy_seed(seed, sorted_blocks, sorted_scores, dimension, early_stop):
     return selected, total
 
 
-@partial(jax.jit, static_argnames=("dimension", "n_seeds", "seed_batch_size", "early_stop"))
-def sgm_kernel(blocks, scores, *, dimension, n_seeds, seed_batch_size=16, early_stop=False):
+@partial(
+    jax.jit,
+    static_argnames=("dimension", "n_seeds", "seed_batch_size", "early_stop", "progress_every"),
+)
+def sgm_kernel(
+    blocks,
+    scores,
+    *,
+    dimension,
+    n_seeds,
+    seed_batch_size=16,
+    early_stop=False,
+    progress_every=0,
+):
     """JIT-compatible core for a complete candidate collection and valid scores.
 
     Stable sorting makes ties reproducible. Seeds are processed in bounded
@@ -89,10 +102,12 @@ def sgm_kernel(blocks, scores, *, dimension, n_seeds, seed_batch_size=16, early_
     """
     permutation = jnp.argsort(-scores, stable=True)
     sorted_blocks, sorted_scores = blocks[permutation], scores[permutation]
-    selected, totals = jax.lax.map(
+    selected, totals = progress_map(
         lambda seed: _greedy_seed(seed, sorted_blocks, sorted_scores, dimension, early_stop),
         jnp.arange(n_seeds, dtype=jnp.int32),
         batch_size=min(seed_batch_size, n_seeds),
+        progress_every=progress_every,
+        label="SGM seeds",
     )
     best_seed = jnp.argmax(totals)
     indices = permutation[selected[best_seed]]
@@ -107,6 +122,7 @@ def seeded_greedy_maximization(
     n_seeds=None,
     seed_batch_size=16,
     early_stop=False,
+    progress_every=0,
 ):
     """Select floor(d/L) disjoint blocks using the top K seeds.
 
@@ -116,6 +132,7 @@ def seeded_greedy_maximization(
     """
     dimension = positive_integer(dimension, "dimension")
     positive_integer(seed_batch_size, "seed_batch_size")
+    validate_progress_every(progress_every)
     blocks_np, scores_np = np.asarray(blocks), np.asarray(scores)
     if blocks_np.ndim != 2 or blocks_np.shape[0] == 0:
         raise ValueError("blocks must be a nonempty (candidates, order) matrix")
@@ -137,6 +154,8 @@ def seeded_greedy_maximization(
         raise ValueError("scores must be finite and nonnegative")
     n_seeds = len(canonical) if n_seeds is None else positive_integer(n_seeds, "n_seeds")
     n_seeds = min(n_seeds, len(canonical))
+    if progress_every:
+        print(f"    SGM seeds: 0/{n_seeds:,}", flush=True)
     return sgm_kernel(
         jnp.asarray(blocks_np),
         jnp.asarray(scores_np, dtype=jnp.result_type(scores_np, 1.0)),
@@ -144,4 +163,5 @@ def seeded_greedy_maximization(
         n_seeds=n_seeds,
         seed_batch_size=seed_batch_size,
         early_stop=early_stop,
+        progress_every=progress_every,
     )

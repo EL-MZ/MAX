@@ -38,8 +38,9 @@ def estimate_evidence(
     fit_fraction=0.5,
     posterior_log_density=None,
     posterior_iat=None,
-    rtol=1e-6,
-    max_iterations=1000,
+    rtol=0.1,
+    max_iterations=None,
+    average_iterations=5,
     evaluation_chunk_size=128,
     **fit_options,
 ):
@@ -88,6 +89,7 @@ def estimate_evidence(
         posterior_iat=posterior_iat,
         rtol=rtol,
         max_iterations=max_iterations,
+        average_iterations=average_iterations,
     )
     return EvidenceResult(
         bridge, fitted, proposals, jnp.arange(split), jnp.arange(split, len(samples)), evaluations

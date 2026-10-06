@@ -51,8 +51,8 @@ python -m benchmarks.block_suite --output benchmark-results/blocks-2026-10-05
 
 For a short check, use `--dimensions 6 --scenarios strong_pairs banana_pairs
 --skip-ablations`. The GitHub Actions workflow pins benchmark dependencies,
-runs tests, executes the suite, and commits the measured artifacts on its
-benchmark branch. [Open the results](../benchmark-results/blocks-2026-10-05/README.md).
+runs tests, executes the suite, and uploads measured artifacts for download.
+Generated results stay outside Git in `benchmark-results/`.
 
 The original merged `src/jax_morph` implementation is left unchanged; this
 benchmark measures it without inserting a new estimator or selection rule.
@@ -63,6 +63,5 @@ benchmark-results/blocks-2026-10-05`. This rebuilds factors and verifies every
 main held-out KL value without rerunning TC scoring. Original measurements
 and timings remain unchanged; `plot_metadata.json` records the rendering commit.
 
-[Read the measured findings](../benchmark-results/blocks-2026-10-05/FINDINGS.md)
-for the tested recovery limits, KDE smoothing errors, support leakage, and
-full-scoring speed comparison.
+Existing local results may include `FINDINGS.md` describing tested recovery limits,
+KDE smoothing errors, support leakage, and the full-scoring speed comparison.

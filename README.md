@@ -2,8 +2,10 @@
 
 Block-distribution benchmarks, KL diagnostics, timings, and corner plots are
 described in [docs/block-benchmarks.md](docs/block-benchmarks.md).
-[Measured findings and plots](benchmark-results/blocks-2026-10-05/FINDINGS.md)
-cover block recovery, density errors, and CPU performance through 30 dimensions.
+Generated benchmark results and plots are saved locally in `benchmark-results/`,
+which is excluded from Git.
+For configurable TC-only CPU/GPU scaling tests with progress counters, see
+[the TC benchmark](docs/tc-benchmark.md).
 
 JAX implementation of the Morph probability density approximation and the
 MorphZ post-processing Bayesian evidence estimator. The baseline follows
@@ -14,6 +16,9 @@ KDE estimates of total correlation and Seeded Greedy Maximization (SGM). MorphZ
 uses independent draws from that product in optimal bridge sampling.
 
 ## Installation
+
+For Linux CPU and CUDA environments managed with uv, see
+[local CPU and CUDA setup](docs/local-setup.md).
 
 Python 3.10 or newer:
 
