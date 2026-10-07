@@ -77,7 +77,8 @@ def test_no_overlap_nonconvergence_and_invalid_values():
     assert np.isnan(result.relative_error)
 
 
-def test_end_to_end_beta_evidence_with_cached_target():
+@pytest.mark.parametrize("geometric_restart", [True, False])
+def test_end_to_end_beta_evidence_with_cached_target(geometric_restart):
     rng = np.random.default_rng(24)
     samples = rng.beta(3, 6, size=(1400, 1))
 
@@ -96,6 +97,8 @@ def test_end_to_end_beta_evidence_with_cached_target():
         n_proposal=1200,
         posterior_log_density=cached,
         posterior_iat=1,
+        geometric_restart=geometric_restart,
+        restart_interval=2,
     )
     assert result.bridge.converged
     assert abs(result.bridge.log_evidence - betaln(3, 6)) < 0.04

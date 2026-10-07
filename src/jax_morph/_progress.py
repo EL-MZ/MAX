@@ -1,9 +1,48 @@
-"""Optional flushed host reports from batched JAX computations."""
+"""Optional host progress events from batched JAX computations."""
+
+from contextlib import contextmanager
+from threading import RLock
 
 import jax
 import jax.numpy as jnp
 
 from ._validation import positive_integer
+
+_renderer = None
+_renderer_lock = RLock()
+
+
+@contextmanager
+def progress_renderer(renderer):
+    """Scope a process-wide renderer to a synchronously awaited benchmark stage.
+
+    Callbacks run on JAX worker threads, so they cannot use a thread-local
+    context. Serialize renderer scopes and drain callbacks before restoring it.
+    The compiled kernels never capture the renderer or require recompilation.
+    """
+    global _renderer
+    with _renderer_lock:
+        previous, _renderer = _renderer, renderer
+        try:
+            yield
+        finally:
+            try:
+                jax.effects_barrier()
+            finally:
+                _renderer = previous
+
+
+def emit_progress(label, completed, total=None, **details):
+    """Return whether a scoped renderer consumed this host-side event."""
+    if _renderer is None:
+        return False
+    _renderer(label, int(completed), total, details)
+    return True
+
+
+def report_count(label, completed, total):
+    if not emit_progress(label, completed, total):
+        print(f"    {label}: {int(completed):,}/{total:,}", flush=True)
 
 
 def validate_progress_every(value):
@@ -25,7 +64,7 @@ def progress_map(function, xs, *, batch_size, progress_every, label):
 
     def report(completed, dependency):
         del dependency
-        print(f"    {label}: {int(completed):,}/{count:,}", flush=True)
+        report_count(label, completed, count)
 
     def emit(completed, values):
         # A scalar dependency keeps reporting after this batch's computation.

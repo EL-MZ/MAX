@@ -11,7 +11,9 @@ from pathlib import Path
 
 import numpy as np
 from scipy.linalg import cho_factor, cho_solve
-from scipy.special import gammaln
+from scipy.special import digamma, gammaln, polygamma
+
+from .correlation_levels import CORRELATION_RANGES, signed_correlation, validate_levels
 
 LOG_2PI = np.log(2 * np.pi)
 
@@ -58,6 +60,10 @@ class RegressionGroup:
     a0: float
     b0: float
     variance_coordinate: str = "variance"
+    variance_shear: np.ndarray | None = None
+    variance_shear_center: float = 0.0
+    correlation_level: str = "original"
+    correlation_strength: float | None = None
 
     @property
     def shape(self):
@@ -75,6 +81,13 @@ class RegressionGroup:
             raise ValueError("inverse-gamma prior must be proper: a0,b0 > 0")
         if self.variance_coordinate not in ("variance", "log_variance"):
             raise ValueError("unknown variance coordinate")
+        validate_levels((self.correlation_level,))
+        if self.variance_shear is not None and (
+            self.variance_shear.shape != (width,)
+            or not np.isfinite(self.variance_shear).all()
+            or not np.isfinite(self.variance_shear_center)
+        ):
+            raise ValueError("invalid coefficient-variance shear")
         if not all(
             np.isfinite(a).all()
             for a in (self.design, self.observations, self.prior_mean, self.prior_covariance)
@@ -119,6 +132,8 @@ class RegressionGroup:
             @ np.linalg.cholesky(self.posterior_covariance).T
         )
         coordinate = np.log(variances) if self.variance_coordinate == "log_variance" else variances
+        if self.variance_shear is not None:
+            beta += (coordinate[:, None] - self.variance_shear_center) * self.variance_shear
         return np.column_stack((beta, coordinate))
 
     def _valid_values(self, points):
@@ -132,7 +147,12 @@ class RegressionGroup:
             variances = coordinate
             jacobian = np.zeros(len(points))
         valid = np.isfinite(points).all(axis=1) & np.isfinite(variances) & (variances > 0)
-        return points[valid, :-1], variances[valid], jacobian[valid], valid
+        beta = points[valid, :-1]
+        if self.variance_shear is not None:
+            beta = (
+                beta - (coordinate[valid, None] - self.variance_shear_center) * self.variance_shear
+            )
+        return beta, variances[valid], jacobian[valid], valid
 
     def logpdf(self, points):
         beta, variances, jacobian, valid = self._valid_values(points)
@@ -176,6 +196,10 @@ class RegressionGroup:
             "a0",
             "b0",
             "variance_coordinate",
+            "variance_shear",
+            "variance_shear_center",
+            "correlation_level",
+            "correlation_strength",
         )
         result = {
             key: getattr(self, key).tolist()
@@ -184,6 +208,7 @@ class RegressionGroup:
             for key in names
         }
         result["posterior"] = {
+            "coordinates": "base coefficients before coefficient-variance shear",
             "mean": self.posterior_mean.tolist(),
             "covariance_scale": self.posterior_covariance.tolist(),
             "shape": self.an,
@@ -199,6 +224,7 @@ class RegressionTarget:
     factors: tuple[RegressionGroup, ...]
     seed: int
     cross_group_coupling: float = 0.0
+    correlation_levels: tuple[str, ...] = ("original",)
 
     def __post_init__(self):
         if not np.isfinite(self.cross_group_coupling):
@@ -268,6 +294,14 @@ class RegressionTarget:
             "seed": self.seed,
             "exact_log_evidence": self.log_evidence,
             "cross_group_coupling": self.cross_group_coupling,
+            "correlation_levels": list(self.correlation_levels),
+            "correlation_ranges": CORRELATION_RANGES,
+            "correlation_note": (
+                "Calibrated groups have signed within-group population Pearson correlation "
+                "of the recorded strength, including coefficient-variance pairs. The prior "
+                "and likelihood use the inverse coefficient-variance shear. Exact evidence "
+                "is preserved; optional cross-group coupling changes physical correlations."
+            ),
             "coupling_note": (
                 "Physical coefficients are a determinant-one cross-group linear shear of "
                 "the independent conjugate coefficients; evaluate prior and likelihood "
@@ -283,6 +317,49 @@ class RegressionTarget:
         }
 
 
+def _calibrate_group(group, level, rng):
+    """Reparameterize the proper model to achieve physical Pearson |r| = rho.
+
+    A coefficient basis change sets conditional covariance; a determinant-one
+    coefficient/variance shear supplies marginal covariance with the variance.
+    Both prior and likelihood are transformed, so the data evidence is invariant.
+    """
+    if level == "original" or len(group.indices) == 1:
+        return group
+    width = len(group.posterior_mean)
+    rho = float(rng.uniform(*CORRELATION_RANGES[level]))
+    signs = rng.choice([-1, 1], width)
+    original_diagonal = np.diag(group.posterior_covariance)
+    desired_cholesky = np.diag(np.sqrt((1 - rho**2) * original_diagonal)) @ np.linalg.cholesky(
+        signed_correlation(width, rho / (1 + rho), signs)
+    )
+    transform = np.linalg.solve(
+        np.linalg.cholesky(group.posterior_covariance).T, desired_cholesky.T
+    ).T
+    mean_variance = group.bn / (group.an - 1)
+    if group.variance_coordinate == "log_variance":
+        center = np.log(group.bn) - digamma(group.an)
+        coordinate_variance = float(polygamma(1, group.an))
+    else:
+        center = mean_variance
+        coordinate_variance = group.bn**2 / ((group.an - 1) ** 2 * (group.an - 2))
+    shear = signs * rho * np.sqrt(mean_variance * original_diagonal / coordinate_variance)
+    return RegressionGroup(
+        indices=group.indices,
+        design=np.linalg.solve(transform.T, group.design.T).T,
+        observations=group.observations,
+        prior_mean=transform @ group.prior_mean,
+        prior_covariance=transform @ group.prior_covariance @ transform.T,
+        a0=group.a0,
+        b0=group.b0,
+        variance_coordinate=group.variance_coordinate,
+        variance_shear=shear,
+        variance_shear_center=float(center),
+        correlation_level=level,
+        correlation_strength=rho,
+    )
+
+
 def make_regression_target(
     dimension,
     seed=20261006,
@@ -291,6 +368,7 @@ def make_regression_target(
     variance_coordinate="variance",
     observations_range=(8, 24),
     cross_group_coupling=0.0,
+    correlation_levels=("original",),
 ):
     """Default: four coefficients and one variance per group, all columns shuffled.
 
@@ -298,6 +376,7 @@ def make_regression_target(
     variance. At 10kD default this gives exactly 2,000 independent 5D groups.
     """
     orders = tuple(sorted(set(group_orders)))
+    levels = validate_levels(correlation_levels)
     if not orders or min(orders) < 1 or max(orders) > 5 or dimension < max(orders):
         raise ValueError("group orders must be 1..5 and fit the dimension")
     if not 1 <= observations_range[0] <= observations_range[1]:
@@ -346,7 +425,17 @@ def make_regression_target(
             )
         )
         offset += width
-    return RegressionTarget(dimension, tuple(groups), seed, cross_group_coupling)
+    correlation_rng = np.random.default_rng(np.random.SeedSequence([seed, 73129]))
+    eligible_index = 0
+    for index, group in enumerate(groups):
+        if len(group.indices) > 1:
+            # Coupled base groups share a level so corner components remain intact.
+            level_index = eligible_index // 2 if cross_group_coupling else eligible_index
+            groups[index] = _calibrate_group(
+                group, levels[level_index % len(levels)], correlation_rng
+            )
+            eligible_index += 1
+    return RegressionTarget(dimension, tuple(groups), seed, cross_group_coupling, levels)
 
 
 def load_regression_target(path):
@@ -364,6 +453,12 @@ def load_regression_target(path):
                 record["a0"],
                 record["b0"],
                 record["variance_coordinate"],
+                np.asarray(record["variance_shear"])
+                if record.get("variance_shear") is not None
+                else None,
+                record.get("variance_shear_center", 0.0),
+                record.get("correlation_level", "original"),
+                record.get("correlation_strength"),
             )
         )
     target = RegressionTarget(
@@ -371,6 +466,7 @@ def load_regression_target(path):
         tuple(groups),
         description["seed"],
         description.get("cross_group_coupling", 0.0),
+        tuple(description.get("correlation_levels", ["original"])),
     )
     if sorted(i for block in target.blocks for i in block) != list(range(target.dimension)):
         raise ValueError("saved groups do not partition the dimensions")

@@ -103,6 +103,16 @@ proposals outside the support must return `-inf`; those draws are retained.
 For non-JAX likelihoods, evaluate densities externally and call `bridge_sampling`
 with the four log-density vectors. See [the numerical method](docs/method.md).
 
+Both APIs default to `geometric_restart=True`: after every 1,000 unconverged
+bridge updates, restart at the midpoint of the last two log-Z values (their
+geometric mean on the Z scale). Set `restart_interval=N` (at least 2) to change
+the cycle length, or `geometric_restart=False` to recover standard uninterrupted
+bridge iteration. `max_iterations` remains a total cap across all cycles.
+The final averaging window uses only updates since the latest restart.
+This repeats the restart remedy of
+[Gronau, Heathcote and Matzke (2020)](https://doi.org/10.3758/s13428-019-01290-6);
+the bridge equation and convergence tolerance are unchanged.
+
 ## Validation and implementation records
 
 ```bash
@@ -114,6 +124,7 @@ python benchmarks/sgm.py --dimension 50 --seeds 128
 ```
 
 - [Method and equations](docs/method.md): mathematical conventions and scope.
+- [JAX execution enhancements](docs/jax-optimizations.md): changes, compatibility, and measurements.
 - [Implementation record](docs/implementation.md): modules, optimizations, deviations,
   diagnostics, and limitations.
 - [Validation record](docs/validation.md): checks and execution results.

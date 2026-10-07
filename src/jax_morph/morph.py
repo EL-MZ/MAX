@@ -10,26 +10,126 @@ import numpy as np
 
 from ._validation import positive_integer, samples_and_weights
 from .correlation import estimate_total_correlations
-from .kde import KDEState, fit_kde, kde_log_prob, sample_kde
-from .sgm import candidate_blocks, seeded_greedy_maximization
+from .kde import KDEState, _fit_kde, _validate_kde_options, kde_log_prob, sample_kde
+from .sgm import _select_validated, candidate_blocks
+
+
+class _FactorGroup(NamedTuple):
+    indices: jax.Array
+    factors: KDEState
 
 
 @jax.tree_util.register_pytree_node_class
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class MorphState:
-    """Immutable PyTree; block structure is static, KDE parameters are leaves."""
+    """Grouped KDE PyTree with dynamic block indices.
 
-    blocks: tuple[tuple[int, ...], ...]
-    factors: tuple[KDEState, ...]
+    The constructor and eager ``blocks``/``factors`` views retain the original
+    API. Only group shapes, factor ordering and dimension are static under JIT.
+    Inspect ``blocks`` outside JIT; numerical kernels use the array indices.
+    """
+
+    _groups: tuple[_FactorGroup, ...]
     dimension: int
+    _layout: tuple[tuple[int, ...], ...]
+
+    def __init__(self, blocks, factors, dimension):
+        groups = {}
+        for position, (block, factor) in enumerate(zip(blocks, factors)):
+            signature = tuple((leaf.shape, leaf.dtype) for leaf in factor)
+            groups.setdefault(signature, []).append((position, block, factor))
+        packed, layout = [], []
+        for members in groups.values():
+            positions, indices, states = zip(*members)
+            packed.append(
+                _FactorGroup(
+                    jnp.asarray(indices, dtype=jnp.int32),
+                    jax.tree_util.tree_map(lambda *xs: jnp.stack(xs), *states),
+                )
+            )
+            layout.append(positions)
+        object.__setattr__(self, "_groups", tuple(packed))
+        object.__setattr__(self, "dimension", dimension)
+        object.__setattr__(self, "_layout", tuple(layout))
+
+    @property
+    def blocks(self):
+        blocks = [None] * sum(map(len, self._layout))
+        for group, positions in zip(self._groups, self._layout):
+            for position, block in zip(positions, np.asarray(group.indices)):
+                blocks[position] = tuple(map(int, block))
+        return tuple(blocks)
+
+    @property
+    def factors(self):
+        factors = [None] * sum(map(len, self._layout))
+        for group, positions in zip(self._groups, self._layout):
+            for index, position in enumerate(positions):
+                factors[position] = jax.tree_util.tree_map(lambda x: x[index], group.factors)
+        return tuple(factors)
 
     def tree_flatten(self):
-        return self.factors, (self.blocks, self.dimension)
+        return self._groups, (self.dimension, self._layout)
 
     @classmethod
-    def tree_unflatten(cls, metadata, factors):
-        blocks, dimension = metadata
-        return cls(blocks, tuple(factors), dimension)
+    def tree_unflatten(cls, metadata, groups):
+        dimension, layout = metadata
+        state = object.__new__(cls)
+        object.__setattr__(state, "_groups", tuple(groups))
+        object.__setattr__(state, "dimension", dimension)
+        object.__setattr__(state, "_layout", layout)
+        return state
+
+
+@jax.jit
+def _fit_factor_group(samples, weights, indices, bandwidth_scale, regularization):
+    return jax.lax.map(
+        lambda block: _fit_kde(samples[:, block], weights, bandwidth_scale, regularization),
+        indices,
+        batch_size=min(16, len(indices)),
+    )
+
+
+@jax.jit
+def _valid_factor_groups(groups):
+    valid = jnp.asarray(True)
+    for group in groups:
+        valid = valid & jnp.all(jnp.isfinite(group.factors.cholesky))
+    return valid
+
+
+def _fit_factors(samples, weights, blocks, bandwidth_scale, regularization):
+    """Fit bounded batches, transferring only one aggregate validity flag."""
+    _validate_kde_options(bandwidth_scale, regularization)
+    if np.count_nonzero(weights) <= max(map(len, blocks)):
+        raise ValueError("a KDE needs more positive-weight samples than dimensions")
+    by_width = {}
+    for position, block in enumerate(blocks):
+        by_width.setdefault(len(block), []).append((position, block))
+    samples, weights = jnp.asarray(samples), jnp.asarray(weights)
+    groups, layout = [], []
+    for members in by_width.values():
+        positions, indices = zip(*members)
+        indices = jnp.asarray(indices, dtype=jnp.int32)
+        groups.append(
+            _FactorGroup(
+                indices,
+                _fit_factor_group(
+                    samples,
+                    weights,
+                    indices,
+                    bandwidth_scale,
+                    regularization,
+                ),
+            )
+        )
+        layout.append(positions)
+    if not bool(_valid_factor_groups(tuple(groups))):
+        raise ValueError(
+            "KDE covariance is singular; remove constant dimensions or explicitly "
+            "set regularization > 0 for collinear dimensions"
+        )
+    return MorphState.tree_unflatten((samples.shape[1], tuple(layout)), groups)
 
 
 class FitDiagnostics(NamedTuple):
@@ -72,6 +172,7 @@ def fit(
     its own singleton KDE, exactly as in Eq. 5. Orders >= 10 are rejected to
     keep factors low dimensional. Use order=1 for a product of marginals.
     Fitting/selection is host-orchestrated; evaluation and sampling are jittable.
+    Set max_candidates=None to enumerate candidates without a count limit.
     """
     samples, weights = samples_and_weights(samples, weights)
     dimension = samples.shape[1]
@@ -99,7 +200,7 @@ def fit(
             candidate_batch_size=candidate_batch_size,
             progress_every=candidate_progress_every,
         )
-        selection = seeded_greedy_maximization(
+        selection = _select_validated(
             candidates,
             correlations.scores,
             dimension=dimension,
@@ -119,16 +220,7 @@ def fit(
             selection.seed_totals,
         )
         tc_sample_count = correlations.sample_count
-    factors = tuple(
-        fit_kde(
-            samples[:, block],
-            weights,
-            bandwidth_scale=bandwidth_scale,
-            regularization=regularization,
-        )
-        for block in blocks
-    )
-    state = MorphState(blocks, factors, dimension)
+    state = _fit_factors(samples, weights, blocks, bandwidth_scale, regularization)
     diagnostics = FitDiagnostics(
         candidates,
         raw_scores,
@@ -148,9 +240,17 @@ def log_prob(state, points, *, chunk_size=128):
     points = jnp.asarray(points)
     if points.ndim not in (1, 2) or points.shape[-1] != state.dimension:
         raise ValueError("points must have shape (d,) or (n, d)")
-    result = jnp.zeros(points.shape[:-1], dtype=state.factors[0].centers.dtype)
-    for block, factor in zip(state.blocks, state.factors):
-        result += kde_log_prob(factor, points[..., jnp.asarray(block)], chunk_size=chunk_size)
+    # A scan carry cannot change dtype when queries or later groups are wider.
+    dtype = jnp.result_type(points, *(group.factors.centers for group in state._groups))
+    result = jnp.zeros(points.shape[:-1], dtype=dtype)
+    for group in state._groups:
+
+        def add_factor(total, item):
+            block, factor = item
+            values = kde_log_prob(factor, points[..., block], chunk_size=chunk_size)
+            return total + values, None
+
+        result, _ = jax.lax.scan(add_factor, result, group)
     return result
 
 
@@ -158,8 +258,14 @@ def log_prob(state, points, *, chunk_size=128):
 def sample(key, state, n):
     """Independent joint proposal draws, using a separate key per factor."""
     positive_integer(n, "n")
-    keys = jax.random.split(key, len(state.factors))
-    result = jnp.zeros((n, state.dimension), dtype=state.factors[0].centers.dtype)
-    for block, factor, factor_key in zip(state.blocks, state.factors, keys):
-        result = result.at[:, jnp.asarray(block)].set(sample_kde(factor_key, factor, n))
+    keys = jax.random.split(key, sum(map(len, state._layout)))
+    result = jnp.zeros((n, state.dimension), dtype=state._groups[0].factors.centers.dtype)
+    for group, positions in zip(state._groups, state._layout):
+        draws = jax.lax.map(
+            lambda item: sample_kde(item[0], item[1], n),
+            (keys[jnp.asarray(positions)], group.factors),
+            batch_size=min(16, len(positions)),
+        )
+        values = draws.transpose(1, 0, 2).reshape(n, -1)
+        result = result.at[:, group.indices.reshape(-1)].set(values)
     return result

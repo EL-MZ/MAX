@@ -101,7 +101,8 @@ def test_prepared_memory_mapped_data_has_correct_cached_density(tmp_path):
 
 
 @pytest.mark.parametrize("prepared", [False, True])
-def test_native_morph_bridge_workflow(tmp_path, prepared, monkeypatch):
+@pytest.mark.parametrize("plots_only", [False, True])
+def test_native_morph_bridge_workflow(tmp_path, prepared, plots_only, monkeypatch, capsys):
     from benchmarks import highdim_suite
 
     calls = []
@@ -132,12 +133,14 @@ def test_native_morph_bridge_workflow(tmp_path, prepared, monkeypatch):
         candidate_batch_size=8,
         seed_batch_size=4,
         sgm_early_stop=True,
-        max_candidates=1000,
+        max_candidates=None,
         proposal_chunk_size=32,
         plot_samples=32,
         rtol=1e-6,
         max_iterations=1000,
         no_plots=True,
+        plots_only=plots_only,
+        progress_reports=0 if prepared and plots_only else 20,
     )
     if prepared:
         args.dataset = tmp_path / "data"
@@ -154,6 +157,30 @@ def test_native_morph_bridge_workflow(tmp_path, prepared, monkeypatch):
     assert np.isfinite(result["log_evidence"]) and np.isfinite(result["forward_kl"])
     assert abs(result["log_evidence_error"]) < 1
     assert result["target_evaluations"] == 64
+    assert calls[0]["max_candidates"] is None
+    assert result["total_runtime_seconds"] >= result["workflow_seconds"]
+    assert result["proposal_survived_count"] == result["proposal_count"]
+    assert result["proposal_survival_fraction"] == 1
+    summary = (tmp_path / "summary.txt").read_text()
+    assert "KL(Post || Morph):" in summary
+    assert "Survived proposals (finite target density): 64/64 (100.0%)" in summary
+    assert "Parameters in known dependent posterior components:" in summary
+    assert (tmp_path / "metrics.json").exists() is not plots_only
+    assert (tmp_path / "target.json").exists() is not plots_only
+    captured = capsys.readouterr()
+    output = captured.out
+    assert "total runtime=" in output and "log Z=" in output
+    assert "fit completed" in output
+    if args.progress_reports:
+        for label in ("candidate scores", "SGM seeds", "Proposal batches", "Bridge"):
+            assert label in captured.err
+    else:
+        assert not captured.err
+    assert "proposals 32/64" not in output
+    assert bool(calls[0]["candidate_progress_every"]) == bool(args.progress_reports)
+    assert bool(calls[0]["seed_progress_every"]) == bool(args.progress_reports)
+    if plots_only:
+        assert "KL=" not in output
     args.proposals = 32
     second = run_case(args, 20, 9, tmp_path, fit_cache=fit_cache)
     assert len(calls) == 1 and second["fit_reused"]
@@ -178,3 +205,20 @@ def test_benchmark_sgm_five_seed_default_and_explicit_override():
     assert sgm_seed_count(16, 1) == 5
     assert sgm_seed_count(17, 1) == 5
     assert sgm_seed_count(1, 1, requested=10) == 1
+
+
+def test_runner_allows_more_than_native_candidate_cap_by_default(tmp_path, monkeypatch):
+    from benchmarks import highdim_suite
+
+    cases = []
+
+    def capture_case(args, dimension, seed, directory, fit_cache=None):
+        cases.append((args.max_candidates, dimension))
+        return dict(complete=True)
+
+    monkeypatch.setattr(highdim_suite, "run_case", capture_case)
+    monkeypatch.setattr(
+        "sys.argv", ["highdim_suite", "--dimensions", "500", "--output", str(tmp_path)]
+    )
+    highdim_suite.main()
+    assert cases == [(None, 500)]  # 124,750 pair candidates exceed the library default cap.

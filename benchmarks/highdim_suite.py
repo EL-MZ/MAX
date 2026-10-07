@@ -19,11 +19,15 @@ import jax
 import jaxlib
 import numpy as np
 from scipy.special import logsumexp
+from tqdm import trange
 
 from jax_morph import bridge_sampling, fit, log_prob, sample
 
+from .correlation_levels import CORRELATION_LEVELS, DEFAULT_CORRELATION_LEVELS
 from .distributions import block_metrics
-from .highdim_io import digest, save_json
+from .highdim_io import digest, format_runtime, save_json
+from .highdim_progress import tqdm_progress
+from .highdim_summary import posterior_dependence, write_case_summary
 from .highdim_target import SHAPES, load_target, make_random_target
 from .memory import MemoryMonitor
 from .regression_target import make_regression_target
@@ -42,16 +46,39 @@ def sgm_seed_count(dimension, order, requested=None):
     return min(count, 5 if requested is None else requested)
 
 
-def bridge_record(bridge, exact_log_z, average_iterations=5):
+def save_case_json(args, path, value):
+    if not getattr(args, "plots_only", False):
+        save_json(path, value)
+
+
+def print_evidence_summary(case):
+    log_z = case["log_evidence"]
+    estimate = f"{log_z:.6f}" if log_z is not None and np.isfinite(log_z) else "unavailable"
+    error = case["relative_error"]
+    uncertainty = f"{error:.2%}" if error is not None and np.isfinite(error) else "unavailable"
+    print(
+        f"{case['dimension']:,}D seed {case['seed']}, {case['proposal_count']:,} proposals: "
+        f"log Z={estimate}, exact={case['exact_log_evidence']:.6f}, "
+        f"relative SE={uncertainty}, converged={case['converged']}; "
+        f"total runtime={format_runtime(case['total_runtime_seconds'])}",
+        flush=True,
+    )
+
+
+def bridge_record(
+    bridge, exact_log_z, average_iterations=5, *, geometric_restart=True, restart_interval=1000
+):
     log_z = float(bridge.log_evidence)
     relative_error = float(bridge.relative_error)
     overlap = min(float(bridge.posterior_overlap), float(bridge.proposal_overlap))
     converged = bool(bridge.converged)
     usable = converged and np.isfinite(relative_error) and relative_error <= 0.2 and overlap >= 0.01
+    count = int(bridge.iterations)
+    available = (max(count, 1) - 1) % restart_interval + 1 if geometric_restart else count
     return {
         "log_evidence": log_z,
         "final_iteration_log_evidence": float(bridge.final_log_evidence),
-        "log_evidence_averaging_iterations": min(int(bridge.iterations), average_iterations),
+        "log_evidence_averaging_iterations": min(count, available, average_iterations),
         "exact_log_evidence": exact_log_z,
         "log_evidence_error": log_z - exact_log_z,
         "relative_error": relative_error,
@@ -59,6 +86,8 @@ def bridge_record(bridge, exact_log_z, average_iterations=5):
         "proposal_overlap": float(bridge.proposal_overlap),
         "importance_ess": float(bridge.importance_ess),
         "iterations": int(bridge.iterations),
+        "geometric_restart": bool(geometric_restart),
+        "bridge_restart_interval": int(restart_interval),
         "converged": converged,
         "status": "usable_overlap" if usable else "poor_overlap_or_nonconvergence",
         "within_3_conditional_se": bool(
@@ -69,6 +98,8 @@ def bridge_record(bridge, exact_log_z, average_iterations=5):
 
 
 def run_case(args, dimension, seed, directory, fit_cache=None):
+    case_start = perf_counter()
+    plots_only = getattr(args, "plots_only", False)
     streams = [
         np.random.default_rng(stream)
         for stream in np.random.SeedSequence([seed, dimension]).spawn(3)
@@ -98,6 +129,7 @@ def run_case(args, dimension, seed, directory, fit_cache=None):
                 variance_coordinate=args.variance_coordinate,
                 observations_range=args.observations_range,
                 cross_group_coupling=args.cross_group_coupling,
+                correlation_levels=getattr(args, "correlation_levels", ("original",)),
             )
         else:
             target = make_random_target(
@@ -106,11 +138,12 @@ def run_case(args, dimension, seed, directory, fit_cache=None):
                 orders=args.target_orders,
                 shapes=args.shapes,
                 log_evidence=args.log_evidence,
+                correlation_levels=getattr(args, "correlation_levels", ("original",)),
             )
         training = target.sample(streams[0], args.fit_samples)
         held_out = target.sample(streams[1], args.posterior_samples)
         posterior_target = target.log_unnormalized(held_out)
-    save_json(directory / "target.json", target.description())
+    save_case_json(args, directory / "target.json", target.description())
     if not np.isfinite(posterior_target).all():
         raise RuntimeError("nonfinite exact posterior density")
     identity_error = float(
@@ -118,6 +151,7 @@ def run_case(args, dimension, seed, directory, fit_cache=None):
     )
     if identity_error > 1e-8:
         raise RuntimeError("prior * likelihood / posterior disagrees with analytical evidence")
+    target_setup_seconds = perf_counter() - case_start
     control_points = target.sample(streams[2], min(128, args.proposals))
     control_logs = target.logpdf(control_points)
     control, control_seconds = timed(
@@ -143,8 +177,10 @@ def run_case(args, dimension, seed, directory, fit_cache=None):
         "true_shape_counts": dict(Counter(block.shape for block in target.factors)),
         "analytic_control": bridge_record(control, target.log_evidence),
         "analytic_control_seconds": control_seconds,
+        "target_setup_seconds": target_setup_seconds,
     }
-    save_json(directory / "metrics.json", case)
+    case["posterior_dependence"] = posterior_dependence(target, held_out[: args.plot_samples])
+    save_case_json(args, directory / "metrics.json", case)
     fit_key, proposal_key = jax.random.split(jax.random.PRNGKey(seed))
     seed_count = sgm_seed_count(dimension, args.morph_order, args.n_seeds)
     reports = getattr(args, "progress_reports", 20)
@@ -176,7 +212,8 @@ def run_case(args, dimension, seed, directory, fit_cache=None):
             flush=True,
         )
         if cached is None:
-            fitted, fit_seconds = timed(lambda: fit(training, key=fit_key, **fit_options))
+            with tqdm_progress(enabled=bool(reports)):
+                fitted, fit_seconds = timed(lambda: fit(training, key=fit_key, **fit_options))
             original_fit_seconds = fit_seconds
             if fit_cache is not None:
                 fit_cache[cache_key] = (fitted, fit_seconds)
@@ -184,7 +221,10 @@ def run_case(args, dimension, seed, directory, fit_cache=None):
             fitted, original_fit_seconds = cached
             fit_seconds = 0.0
             print("    reusing the previous native Morph fit", flush=True)
-        print(f"    fit completed in {fit_seconds:.2f}s; evaluating held-out posterior", flush=True)
+        print(
+            f"    fit completed in {format_runtime(fit_seconds)}; evaluating held-out posterior",
+            flush=True,
+        )
         posterior_proposal, posterior_seconds = timed(
             lambda: log_prob(fitted.state, held_out, chunk_size=args.query_chunk_size)
         )
@@ -206,7 +246,7 @@ def run_case(args, dimension, seed, directory, fit_cache=None):
             seed_count=len(fitted.diagnostics.seed_totals),
         )
         case.update(block_metrics(target.blocks, fitted.state.blocks))
-        save_json(directory / "metrics.json", case)
+        save_case_json(args, directory / "metrics.json", case)
         warm_points = held_out[: min(args.proposal_chunk_size, len(held_out))]
         _, warm_seconds = timed(
             lambda: log_prob(fitted.state, warm_points, chunk_size=args.query_chunk_size)
@@ -216,7 +256,10 @@ def run_case(args, dimension, seed, directory, fit_cache=None):
         sample_seconds, density_seconds, target_seconds = 0.0, 0.0, 0.0
         chunks = (args.proposals + args.proposal_chunk_size - 1) // args.proposal_chunk_size
         keys = jax.random.split(proposal_key, chunks)
-        for index, start in enumerate(range(0, args.proposals, args.proposal_chunk_size)):
+        for index in trange(
+            chunks, desc="Proposal batches", unit="batch", disable=not reports, dynamic_ncols=True
+        ):
+            start = index * args.proposal_chunk_size
             count = min(args.proposal_chunk_size, args.proposals - start)
             proposal, seconds = timed(lambda: sample(keys[index], fitted.state, count))
             sample_seconds += seconds
@@ -233,35 +276,38 @@ def run_case(args, dimension, seed, directory, fit_cache=None):
             have = sum(len(batch) for batch in previews)
             if have < args.plot_samples:
                 previews.append(proposal[: args.plot_samples - have])
-            completed = start + count
-            proposal_every = (args.proposals + reports - 1) // reports if reports else 0
-            if reports and (
-                index == 0
-                or completed == args.proposals
-                or completed // proposal_every != start // proposal_every
-            ):
-                print(f"    proposals {completed:,}/{args.proposals:,}", flush=True)
         targets, logs = np.concatenate(targets), np.concatenate(logs)
         case["outside_support_fraction"] = float(np.mean(np.isneginf(targets)))
+        case["proposal_survived_count"] = int(np.isfinite(targets).sum())
+        case["proposal_survival_fraction"] = case["proposal_survived_count"] / len(targets)
         if np.isfinite(targets).any():
-            bridge, bridge_seconds = timed(
-                lambda: bridge_sampling(
-                    posterior_target,
-                    posterior_proposal,
-                    targets,
-                    logs,
-                    posterior_iat=1.0,
-                    rtol=args.rtol,
-                    max_iterations=args.max_iterations,
-                    average_iterations=getattr(args, "bridge_average_iterations", 5),
-                    progress_every=(
-                        ((args.max_iterations or 10000) + reports - 1) // reports if reports else 0
-                    ),
+            with tqdm_progress(enabled=bool(reports)):
+                bridge, bridge_seconds = timed(
+                    lambda: bridge_sampling(
+                        posterior_target,
+                        posterior_proposal,
+                        targets,
+                        logs,
+                        posterior_iat=1.0,
+                        rtol=args.rtol,
+                        max_iterations=args.max_iterations,
+                        average_iterations=getattr(args, "bridge_average_iterations", 5),
+                        geometric_restart=getattr(args, "geometric_restart", True),
+                        restart_interval=getattr(args, "bridge_restart_interval", 1000),
+                        progress_every=(
+                            ((args.max_iterations or 10000) + reports - 1) // reports
+                            if reports
+                            else 0
+                        ),
+                    )
                 )
-            )
             case.update(
                 bridge_record(
-                    bridge, target.log_evidence, getattr(args, "bridge_average_iterations", 5)
+                    bridge,
+                    target.log_evidence,
+                    getattr(args, "bridge_average_iterations", 5),
+                    geometric_restart=getattr(args, "geometric_restart", True),
+                    restart_interval=getattr(args, "bridge_restart_interval", 1000),
                 )
             )
         else:
@@ -303,19 +349,31 @@ def run_case(args, dimension, seed, directory, fit_cache=None):
             proposal_count=args.proposals,
         )
     case["memory"] = memory.final_report
-    save_json(directory / "metrics.json", case)
+    case["total_runtime_seconds"] = perf_counter() - case_start
+    save_case_json(args, directory / "metrics.json", case)
     if not args.no_plots:
         from .highdim_plots import plot_case
 
-        plot_case(target, held_out[: args.plot_samples], np.concatenate(previews), case, directory)
+        case["corner_plots"] = plot_case(
+            target,
+            held_out[: args.plot_samples],
+            np.concatenate(previews),
+            case,
+            directory,
+            corner_dimensions=getattr(args, "corner_dimensions", 10),
+            corner_count=getattr(args, "corner_count", 3),
+        )
     case["complete"] = True
-    save_json(directory / "metrics.json", case)
-    print(
-        f"    KL={case['forward_kl']:.3f}, pair recall={case['pair_recall']}, "
-        f"delta logZ={case['log_evidence_error']}, "
-        f"overlap={case['proposal_overlap']:.3g}, {case['status']}",
-        flush=True,
-    )
+    write_case_summary(case, directory)
+    save_case_json(args, directory / "metrics.json", case)
+    if not plots_only:
+        print(
+            f"    KL={case['forward_kl']:.3f}, pair recall={case['pair_recall']}, "
+            f"delta logZ={case['log_evidence_error']}, "
+            f"overlap={case['proposal_overlap']:.3g}, {case['status']}",
+            flush=True,
+        )
+    print_evidence_summary(case)
     return case
 
 
@@ -325,6 +383,16 @@ def main():
     parser.add_argument("--dimensions", nargs="+", type=int, default=[200])
     parser.add_argument("--family", choices=("regression", "synthetic"), default="regression")
     parser.add_argument("--group-orders", nargs="+", type=int, default=[5])
+    parser.add_argument(
+        "--correlation-levels",
+        nargs="+",
+        choices=CORRELATION_LEVELS,
+        default=DEFAULT_CORRELATION_LEVELS,
+        help=(
+            "posterior correlation levels; default: low medium strong; "
+            "original keeps legacy targets"
+        ),
+    )
     parser.add_argument(
         "--variance-coordinate", choices=("variance", "log_variance"), default="variance"
     )
@@ -355,7 +423,11 @@ def main():
     parser.add_argument(
         "--tc-samples", type=int, help="default: native Morph uses all fitting rows"
     )
-    parser.add_argument("--max-candidates", type=int, default=100_000)
+    parser.add_argument(
+        "--max-candidates",
+        type=int,
+        help="optional candidate-count cap; default: unlimited",
+    )
     parser.add_argument("--candidate-batch-size", type=int, default=1)
     parser.add_argument("--seed-batch-size", type=int, default=16)
     parser.add_argument("--sgm-early-stop", action="store_true")
@@ -381,19 +453,52 @@ def main():
         help="report the mean of this many final computed logZ values; default: 5",
     )
     parser.add_argument(
+        "--no-geometric-restart",
+        dest="geometric_restart",
+        action="store_false",
+        help="use standard bridge iteration without geometric-mean restarts",
+    )
+    parser.add_argument(
+        "--bridge-restart-interval",
+        type=int,
+        default=1000,
+        help="unconverged updates between geometric-mean restarts; default: 1000",
+    )
+    parser.add_argument(
         "--progress-reports",
         type=int,
         default=20,
-        help="approximate number of flushed progress reports per stage; 0 disables",
+        help="approximate compiled-stage progress-bar updates; 0 disables progress bars",
     )
     parser.add_argument("--plot-samples", type=int, default=1000)
+    parser.add_argument(
+        "--corner-dimensions",
+        type=int,
+        default=10,
+        help="parameters per correlation-ranked corner plot; default: 10",
+    )
+    parser.add_argument(
+        "--corner-count",
+        type=int,
+        default=3,
+        help="number of disjoint correlation-ranked corner plots; default: 3",
+    )
     parser.add_argument("--no-plots", action="store_true")
+    parser.add_argument(
+        "--plots-only",
+        action="store_true",
+        help="save plots and summary.txt without JSON files; retain progress messages",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--output", type=Path, default=Path("benchmark-results/highdim"))
     args = parser.parse_args()
+    if args.plots_only and (args.no_plots or args.resume):
+        parser.error("--plots-only cannot be combined with --no-plots or --resume")
     if args.progress_reports < 0:
         parser.error("progress-reports must be nonnegative")
+    if args.bridge_restart_interval < 2:
+        parser.error("bridge-restart-interval must be at least 2")
     if args.proposal_counts and (
         min(args.proposal_counts) < 2 or len(set(args.proposal_counts)) != len(args.proposal_counts)
     ):
@@ -406,13 +511,15 @@ def main():
         args.family = (
             "regression" if manifest.get("family") == "grouped_regression" else "synthetic"
         )
+        saved_target = json.loads((args.dataset / "target.json").read_text())
+        args.correlation_levels = saved_target.get("correlation_levels", ["original"])
         if len(args.seeds) != 1:
             parser.error(
                 "a prepared dataset uses fixed posterior draws; use one proposal/search seed"
             )
     if args.family == "regression" and args.log_evidence is not None and not args.dataset:
         parser.error("regression evidence is determined by the model, not assigned")
-    for name in ("dimensions", "target_orders", "shapes", "seeds"):
+    for name in ("dimensions", "target_orders", "shapes", "seeds", "correlation_levels"):
         if len(set(getattr(args, name))) != len(getattr(args, name)):
             parser.error(f"duplicate {name}")
     if (
@@ -440,6 +547,8 @@ def main():
         "max_iterations",
         "bridge_average_iterations",
         "plot_samples",
+        "corner_dimensions",
+        "corner_count",
     ):
         value = getattr(args, name)
         if value is not None and value < 1:
@@ -462,7 +571,7 @@ def main():
             f"{sgm_seed_count(dimension, args.morph_order, args.n_seeds):,} SGM seeds",
             flush=True,
         )
-        if not args.dry_run and count > args.max_candidates:
+        if not args.dry_run and args.max_candidates is not None and count > args.max_candidates:
             parser.error(
                 f"{count:,} candidates exceed --max-candidates {args.max_candidates:,}; "
                 "explicitly choose a limit"
@@ -480,11 +589,16 @@ def main():
     }
     args.output.mkdir(parents=True, exist_ok=True)
     path = args.output / "configuration.json"
-    if path.exists():
-        if not args.resume or json.loads(path.read_text()) != config:
-            parser.error("output exists; use matching --resume settings or a new output directory")
-    else:
-        save_json(path, config)
+    if not args.plots_only:
+        if path.exists():
+            previous_config = json.loads(path.read_text())
+            previous_config.setdefault("correlation_levels", ["original"])
+            if not args.resume or previous_config != config:
+                parser.error(
+                    "output exists; use matching --resume settings or a new output directory"
+                )
+        else:
+            save_json(path, config)
     try:
         revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     except (OSError, subprocess.CalledProcessError):
@@ -525,13 +639,21 @@ def main():
                 if previous and previous.get("complete"):
                     print(f"Skipping completed {directory.name}", flush=True)
                     case = previous
+                    if "posterior_dependence" not in case:
+                        case["posterior_dependence"] = posterior_dependence(
+                            load_target(directory / "target.json")
+                        )
+                    write_case_summary(case, directory)
                 else:
                     case = run_case(args, dimension, seed, directory, fit_cache=fit_cache)
                 run["cases"].append(case)
-                save_json(args.output / "results.json", run)
+                save_case_json(args, args.output / "results.json", run)
             fit_cache.clear()
             jax.clear_caches()
-    print(f"Saved {args.output / 'results.json'}", flush=True)
+    if args.plots_only:
+        print(f"Saved plots and summary.txt to {args.output}", flush=True)
+    else:
+        print(f"Saved {args.output / 'results.json'}", flush=True)
 
 
 if __name__ == "__main__":

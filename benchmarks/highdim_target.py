@@ -6,7 +6,9 @@ from itertools import product
 from pathlib import Path
 
 import numpy as np
-from scipy.special import logsumexp
+from scipy.special import logsumexp, roots_hermitenorm
+
+from .correlation_levels import CORRELATION_RANGES, signed_correlation, validate_levels
 
 SHAPES = ("gaussian", "banana", "mixture", "sinh_arcsinh", "parity")
 LOG_2PI = np.log(2 * np.pi)
@@ -24,6 +26,9 @@ class RandomBlock:
     tail: np.ndarray
     means: np.ndarray
     probabilities: np.ndarray
+    correlation_level: str = "original"
+    correlation_strength: float | None = None
+    physical_transform: np.ndarray | None = None
 
     def sample(self, rng, n):
         width = len(self.indices)
@@ -35,12 +40,21 @@ class RandomBlock:
             latent[:, 1:] += self.curvature[1:] * (latent[:, :1] ** 2 - 1)
         if self.shape == "sinh_arcsinh":
             latent = np.sinh((np.arcsinh(latent) + self.skew) / self.tail)
-        return self.location + self.scale * latent
+        values = self.scale * latent
+        if self.physical_transform is not None:
+            values = values @ self.physical_transform.T
+        return self.location + values
 
     def logpdf(self, points):
         width = len(self.indices)
-        latent = (points - self.location) / self.scale
+        values = points - self.location
+        transform_logdet = 0.0
+        if self.physical_transform is not None:
+            values = np.linalg.solve(self.physical_transform, values.T).T
+            transform_logdet = np.linalg.slogdet(self.physical_transform)[1]
+        latent = values / self.scale
         log_jacobian = np.full(len(points), -np.log(self.scale).sum())
+        log_jacobian -= transform_logdet
         if self.shape == "banana" and width > 1:
             latent = latent.copy()
             latent[:, 1:] -= self.curvature[1:] * (latent[:, :1] ** 2 - 1)
@@ -78,6 +92,7 @@ class RandomBlockTarget:
     factors: tuple[RandomBlock, ...]
     seed: int
     log_evidence: float
+    correlation_levels: tuple[str, ...] = ("original",)
 
     @property
     def blocks(self):
@@ -123,10 +138,47 @@ class RandomBlockTarget:
             "dimension": self.dimension,
             "seed": self.seed,
             "exact_log_evidence": self.log_evidence,
+            "correlation_levels": list(self.correlation_levels),
+            "correlation_ranges": CORRELATION_RANGES,
+            "correlation_note": (
+                "Physical affine transforms calibrate Pearson correlation using analytical "
+                "moments (Gaussian, banana, mixture) or Gaussian quadrature (sinh_arcsinh). "
+                "Pure parity blocks retain pairwise independence."
+            ),
             "support": "R^d",
             "construction": "log L = log p + exact_log_evidence - log N(0,I)",
             "factors": [block.description() for block in self.factors],
         }
+
+
+def _physical_covariance(block):
+    """Moments before the optional physical affine transform."""
+    covariance = block.correlation.copy()
+    if block.shape == "banana":
+        curvature = block.curvature.copy()
+        curvature[0] = 0
+        covariance += 2 * np.outer(curvature, curvature)
+    elif block.shape == "mixture":
+        mean = block.probabilities @ block.means
+        centered = block.means - mean
+        covariance = 0.45**2 * covariance + centered.T @ (block.probabilities[:, None] * centered)
+    elif block.shape == "sinh_arcsinh":
+        # Deterministic moment quadrature; no posterior samples used for calibration.
+        nodes, weights = roots_hermitenorm(64)
+        weights /= np.sqrt(2 * np.pi)
+        transformed = np.sinh((np.arcsinh(nodes[:, None]) + block.skew) / block.tail)
+        means = weights @ transformed
+        covariance = np.diag(weights @ (transformed**2) - means**2)
+        for i in range(len(block.indices)):
+            for j in range(i):
+                r = block.correlation[i, j]
+                second = r * nodes[:, None] + np.sqrt(1 - r**2) * nodes[None, :]
+                second = np.sinh((np.arcsinh(second) + block.skew[j]) / block.tail[j])
+                moment = np.sum(
+                    weights[:, None] * weights[None, :] * transformed[:, i, None] * second
+                )
+                covariance[i, j] = covariance[j, i] = moment - means[i] * means[j]
+    return block.scale[:, None] * covariance * block.scale[None, :]
 
 
 def make_random_target(
@@ -136,6 +188,7 @@ def make_random_target(
     orders=(1, 2, 3, 4, 5),
     shapes=SHAPES[:4],
     log_evidence=None,
+    correlation_levels=("original",),
 ):
     """Random block widths, signs, strengths, shapes, scales, and column order.
 
@@ -144,6 +197,7 @@ def make_random_target(
     higher-order stress test; every proper subset of its coordinates is independent.
     """
     orders = tuple(sorted(set(orders)))
+    levels = validate_levels(correlation_levels)
     if not orders or min(orders) < 1 or max(orders) > 5 or dimension < max(orders):
         raise ValueError("require dimension >= max(orders), and orders in 1..5")
     if not shapes or any(shape not in SHAPES for shape in shapes):
@@ -196,11 +250,30 @@ def make_random_target(
             )
         )
         offset += width
+    correlation_rng = np.random.default_rng(np.random.SeedSequence([seed, 73129]))
+    eligible_index = 0
+    for block in factors:
+        if len(block.indices) < 2 or block.shape == "parity":
+            continue
+        level = levels[eligible_index % len(levels)]
+        eligible_index += 1
+        if level == "original":
+            continue
+        rho = float(correlation_rng.uniform(*CORRELATION_RANGES[level]))
+        signs = correlation_rng.choice([-1, 1], len(block.indices))
+        covariance = _physical_covariance(block)
+        scales = np.sqrt(np.diag(covariance))
+        desired = scales[:, None] * signed_correlation(len(scales), rho, signs) * scales[None, :]
+        block.physical_transform = np.linalg.solve(
+            np.linalg.cholesky(covariance).T, np.linalg.cholesky(desired).T
+        ).T
+        block.correlation_level, block.correlation_strength = level, rho
     return RandomBlockTarget(
         dimension,
         tuple(factors),
         seed,
         -0.1 * dimension if log_evidence is None else float(log_evidence),
+        levels,
     )
 
 
@@ -227,12 +300,17 @@ def load_target(path):
         record["indices"] = tuple(record["indices"])
         for name in array_names:
             record[name] = np.asarray(record[name], dtype=np.float64)
+        if record.get("physical_transform") is not None:
+            record["physical_transform"] = np.asarray(
+                record["physical_transform"], dtype=np.float64
+            )
         factors.append(RandomBlock(**record))
     target = RandomBlockTarget(
         description["dimension"],
         tuple(factors),
         description["seed"],
         description["exact_log_evidence"],
+        tuple(description.get("correlation_levels", ["original"])),
     )
     if sorted(i for block in target.blocks for i in block) != list(range(target.dimension)):
         raise ValueError("saved blocks do not partition the dimensions")

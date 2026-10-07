@@ -154,7 +154,7 @@ def main():
         for name, stage in (
             ("candidate_blocks", "candidate_enumeration"),
             ("estimate_total_correlations", "tc_search"),
-            ("seeded_greedy_maximization", "sgm_selection"),
+            ("_select_validated", "sgm_selection"),
         ):
             original = getattr(morph, name)
             originals[name] = original
@@ -167,14 +167,14 @@ def main():
                 return value
 
             setattr(morph, name, measured)
-        originals["fit_kde"] = morph.fit_kde
+        originals["_fit_factors"] = morph._fit_factors
 
         def measured_kde(*positional, **keywords):
             if monitor.stage != "final_kde_fits":
                 monitor.set_stage("final_kde_fits")
-            return originals["fit_kde"](*positional, **keywords)
+            return originals["_fit_factors"](*positional, **keywords)
 
-        morph.fit_kde = measured_kde
+        morph._fit_factors = measured_kde
         monitor.set_stage("fit_validation")
         before_fit = memory_snapshot()
         started = monotonic()

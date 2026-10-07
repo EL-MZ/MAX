@@ -81,3 +81,9 @@ def test_candidate_limit_and_incomplete_collection():
         seeded_greedy_maximization(blocks[:-1], np.ones(len(blocks) - 1), dimension=5)
     with pytest.raises(ValueError, match="nonnegative"):
         seeded_greedy_maximization(blocks, -np.ones(len(blocks)), dimension=5)
+
+
+def test_unlimited_enumeration_includes_every_pair_above_default_cap():
+    blocks = np.asarray(candidate_blocks(500, 2, max_candidates=None))
+    assert blocks.shape == (124750, 2)
+    np.testing.assert_array_equal(blocks, list(combinations(range(500), 2)))

@@ -13,7 +13,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ._progress import progress_map, validate_progress_every
+from ._progress import progress_map, report_count, validate_progress_every
 from ._validation import positive_integer
 
 
@@ -26,14 +26,15 @@ class SGMResult(NamedTuple):
 
 
 def candidate_blocks(dimension, order=2, *, max_candidates=100_000):
-    """Enumerate all blocks, in lexicographic order; never silently prune them."""
+    """Enumerate all blocks; max_candidates=None disables the allocation limit."""
     dimension = positive_integer(dimension, "dimension")
     order = positive_integer(order, "order")
-    positive_integer(max_candidates, "max_candidates")
+    if max_candidates is not None:
+        positive_integer(max_candidates, "max_candidates")
     if order > dimension:
         raise ValueError("order cannot exceed dimension")
     count = comb(dimension, order)
-    if count > max_candidates:
+    if max_candidates is not None and count > max_candidates:
         raise ValueError(
             f"{count:,} candidate blocks exceed max_candidates={max_candidates:,}; "
             "choose a smaller order or explicitly raise the limit"
@@ -133,7 +134,7 @@ def seeded_greedy_maximization(
     dimension = positive_integer(dimension, "dimension")
     positive_integer(seed_batch_size, "seed_batch_size")
     validate_progress_every(progress_every)
-    blocks_np, scores_np = np.asarray(blocks), np.asarray(scores)
+    blocks_np, scores_array = np.asarray(blocks), jnp.asarray(scores)
     if blocks_np.ndim != 2 or blocks_np.shape[0] == 0:
         raise ValueError("blocks must be a nonempty (candidates, order) matrix")
     order = blocks_np.shape[1]
@@ -148,17 +149,46 @@ def seeded_greedy_maximization(
         or len(canonical) != comb(dimension, order)
     ):
         raise ValueError("blocks must contain every length-order combination exactly once")
-    if scores_np.shape != (len(canonical),):
+    if scores_array.shape != (len(canonical),):
         raise ValueError("scores must have shape (n_candidates,)")
-    if not np.isfinite(scores_np).all() or np.any(scores_np < 0):
+    if not bool(_valid_scores(scores_array)):
         raise ValueError("scores must be finite and nonnegative")
-    n_seeds = len(canonical) if n_seeds is None else positive_integer(n_seeds, "n_seeds")
-    n_seeds = min(n_seeds, len(canonical))
-    if progress_every:
-        print(f"    SGM seeds: 0/{n_seeds:,}", flush=True)
-    return sgm_kernel(
+    return _select_validated(
         jnp.asarray(blocks_np),
-        jnp.asarray(scores_np, dtype=jnp.result_type(scores_np, 1.0)),
+        scores_array,
+        dimension=dimension,
+        n_seeds=n_seeds,
+        seed_batch_size=seed_batch_size,
+        early_stop=early_stop,
+        progress_every=progress_every,
+    )
+
+
+@jax.jit
+def _valid_scores(scores):
+    return jnp.all(jnp.isfinite(scores)) & jnp.all(scores >= 0)
+
+
+def _select_validated(
+    blocks,
+    scores,
+    *,
+    dimension,
+    n_seeds=None,
+    seed_batch_size=16,
+    early_stop=False,
+    progress_every=0,
+):
+    """Internal path for complete generated candidates and validated TC scores."""
+    positive_integer(seed_batch_size, "seed_batch_size")
+    validate_progress_every(progress_every)
+    n_seeds = len(blocks) if n_seeds is None else positive_integer(n_seeds, "n_seeds")
+    n_seeds = min(n_seeds, len(blocks))
+    if progress_every:
+        report_count("SGM seeds", 0, n_seeds)
+    return sgm_kernel(
+        blocks,
+        jnp.asarray(scores, dtype=jnp.result_type(scores, 1.0)),
         dimension=dimension,
         n_seeds=n_seeds,
         seed_batch_size=seed_batch_size,

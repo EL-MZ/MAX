@@ -66,6 +66,13 @@ def _fit_kde(samples, weights, bandwidth_scale, regularization):
     )
 
 
+def _validate_kde_options(bandwidth_scale, regularization):
+    if not np.isfinite(bandwidth_scale) or bandwidth_scale <= 0:
+        raise ValueError("bandwidth_scale must be finite and positive")
+    if not np.isfinite(regularization) or regularization < 0:
+        raise ValueError("regularization must be finite and nonnegative")
+
+
 def fit_kde(samples, weights=None, *, bandwidth_scale=1.0, regularization=0.0):
     """Fit a KDE to rows of samples. Fitting validation runs on the host.
 
@@ -73,10 +80,7 @@ def fit_kde(samples, weights=None, *, bandwidth_scale=1.0, regularization=0.0):
     the standard KDE exactly and rejects singular covariance matrices.
     """
     samples, weights = samples_and_weights(samples, weights)
-    if not np.isfinite(bandwidth_scale) or bandwidth_scale <= 0:
-        raise ValueError("bandwidth_scale must be finite and positive")
-    if not np.isfinite(regularization) or regularization < 0:
-        raise ValueError("regularization must be finite and nonnegative")
+    _validate_kde_options(bandwidth_scale, regularization)
     if np.count_nonzero(weights) <= samples.shape[1]:
         raise ValueError("a KDE needs more positive-weight samples than dimensions")
     state = _fit_kde(jnp.asarray(samples), jnp.asarray(weights), bandwidth_scale, regularization)

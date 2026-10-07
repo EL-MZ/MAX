@@ -47,6 +47,20 @@ Optional `--shapes parity` creates noisy parity blocks of orders 3--5 with
 independent proper subsets. It is excluded from the default shape mixture.
 It can test a pair model's inability to represent pure higher-order dependence.
 
+New command-line runs use `--correlation-levels low medium strong`: absolute
+posterior Pearson correlation ranges 0.10–0.30, 0.40–0.65, and 0.80–0.95.
+Use `--correlation-levels strong` for pronounced correlation in all eligible
+blocks, or `--correlation-levels original` for legacy targets. Blocks receive
+an invertible physical affine transform based on their covariance; the exact
+density includes its determinant. Gaussian, banana and mixture moments are
+analytical; sinh-arcsinh uses deterministic Gaussian quadrature, so its Pearson
+calibration is approximate. Pure parity blocks retain pairwise independence,
+and singletons are unchanged. The Python factory retains the original default.
+Three default corner plots prefer one level each, ranking groups within the
+level. Independent blocks stay independent, so cross-block pairs in a 10D
+corner still show little correlation. Plot titles report the within-component
+mean separately from the mean over all plotted pairs.
+
 ## Prepare data without running Morph
 
 Use Python from an environment containing this repository's benchmark extra
@@ -111,7 +125,7 @@ or `--uv` selects another environment. GPU mode requires a GPU and does not
 silently fall back to CPU.
 
 The runner defaults to order 2, Silverman bandwidth, no ridge, all fitting rows
-for TC, the top five SGM seeds, and the 100,000-candidate guard. An explicit
+for TC, the top five SGM seeds, and unlimited candidate enumeration. An explicit
 `--n-seeds` value overrides the default seed budget; there is no square-root rule.
 Options expose the current library controls; no candidates are screened or
 silently pruned. `--target-orders` changes the true distribution's widths,
@@ -131,14 +145,15 @@ bash scripts/run-highdim.sh cpu --dimensions 3000 5000 10000 --dry-run
 | 5,000 | 12,497,500 |
 | 10,000 | 49,995,000 |
 
-Large runs require an explicitly chosen `--max-candidates` above the native
-default. Choose TC sample count, SGM seeds, and batching yourself. For prepared
-data, the runner infers dimension from its manifest:
+The high-dimensional runner disables the library's default candidate-count cap,
+so no `--max-candidates` argument is needed. You can still supply that option
+to set an explicit cap. Choose TC sample count, SGM seeds, and batching yourself.
+For prepared data, the runner infers dimension from its manifest:
 
 ```bash
 bash scripts/run-highdim.sh gpu \
   --dataset benchmark-results/highdim-data/3000d \
-  --morph-order 2 --max-candidates 4500000 \
+  --morph-order 2 \
   --output benchmark-results/highdim-3000
 ```
 
@@ -157,7 +172,7 @@ bash scripts/run-highdim.sh cpu \
   --family synthetic \
   --dimensions 200 500 --morph-order 2 \
   --fit-samples 256 --posterior-samples 256 --proposals 256 \
-  --tc-samples 32 --n-seeds 4 --max-candidates 125000 \
+  --tc-samples 32 --n-seeds 4 \
   --candidate-batch-size 32 --seed-batch-size 4 --sgm-early-stop \
   --query-chunk-size 64 --proposal-chunk-size 128 --plot-samples 256 \
   --output benchmark-results/highdim-smoke-2026-10-06
@@ -184,7 +199,62 @@ models; `--seeds` can repeat fits on the same saved target.
 
 Outputs are checkpointed in `metrics.json` per case and combined in `results.json`.
 Use `--resume` with identical options to skip completed cases. An interrupted
-case is rerun from its recorded seed. Plots show one representative true block
-per order and the evidence iteration history, rather than a full 10kD corner plot.
+case is rerun from its recorded seed. Plots now show three disjoint 10-parameter
+corners, preferring one configured correlation level each, plus the evidence
+iteration history. `--corner-count` and `--corner-dimensions` override these
+defaults. True dependency components within each level are ranked by their mean absolute Pearson
+correlation in the held-out plotting samples. Whole components are kept together
+when they fit; smaller independent components share a panel. Selection computes
+only small component correlation matrices, never a full 10kD matrix. Parameters
+are not reused across panels; small targets produce fewer or smaller plots.
+Files are `corner_01_10d.png`, `corner_02_10d.png`, and `corner_03_10d.png`.
+The selected indices and observed mean/maximum absolute correlations are saved
+in `metrics.json` under `corner_plots`. Plot selection does not change the target
+or Morph fit, and independent components retain their lack of cross-correlation.
+The evidence history adds a capped error bar at the final actual iteration,
+using the reported relative standard error as an approximate log-Z standard
+error (`SE(log Z) ≈ SE(Z)/Z`). That error is evaluated at the reported averaged
+estimate; the marker stays at the final solver iterate. Nonfinite/unavailable
+errors are omitted.
+The evidence plot title also shows the full target dimension and total runtime
+in `h:mm:ss`, rounded to the nearest second, matching the terminal summary.
+`total_runtime_seconds` measures each case from target generation/loading through
+evidence estimation and diagnostics, including first-call compilation; plot
+rendering is excluded. Historical metrics use their saved `workflow_seconds`
+when the newer total is unavailable.
 `--no-plots` skips them. Local results remain in the ignored `benchmark-results/`
 directory.
+
+For corner comparisons, evidence plots and a short text summary, add `--plots-only`:
+
+```bash
+bash scripts/run-highdim.sh cpu --plots-only \
+  --output benchmark-results/highdim-plots
+```
+
+Every case writes `summary.txt`, including in `--plots-only` mode. It lists
+dimensions, evidence and relative error, KL(Post || Morph) in nats with its
+conditional Monte Carlo standard error, runtime stages in `h:mm:ss`, and
+survived/total proposals. Survived means finite target density; all proposals
+still enter bridge estimation. The report includes importance ESS separately.
+
+The posterior statistics distinguish parameters in known dependent components
+from empirical linear correlation. The latter counts parameters with at least
+one within-component pair having `|Pearson r| >= 0.30`, using up to `--plot-samples`
+held-out exact draws. Positive and negative pair counts are listed separately.
+Known nonlinear scale, banana, mixture, transformed and parity dependence types
+are listed as applicable. Order counts are disjoint components (pairs,
+triplets, etc.), not every subset or pure interaction orders. Coupled regression
+also lists the underlying base-group counts; Morph's selected orders are shown
+alongside the posterior counts. Historical runs without posterior draws list
+only the known structural counts and types.
+
+`--plots-only` suppresses `target.json`, `metrics.json`, `configuration.json`, and
+`results.json`. Stage and progress messages remain enabled, controlled by
+`--progress-reports`. Candidate scoring, SGM seeds, proposal batches and bridge
+iterations use live tqdm bars; `--progress-reports 0` disables those bars.
+The terminal also prints each case's evidence estimate,
+exact evidence, relative standard error, convergence, total runtime, and the
+plot directory. Use a fresh output directory
+for a folder containing only plots and `summary.txt`. This mode cannot be combined with `--resume`
+or `--no-plots`; checkpointing remains available in the default mode.

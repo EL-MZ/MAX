@@ -21,12 +21,15 @@ model is substituted. The source paper version is recorded in `method.md`.
 | `bridge.py` | Log-space iteration, convergence trace, overlap and error diagnostics |
 | `evidence.py` | Consecutive sample split, target evaluation, complete MorphZ workflow |
 
-Fitting orchestration validates on the host. `kde_log_prob`, `sample_kde`,
+Fitting orchestration validates host inputs and compact device-side validity flags. `kde_log_prob`, `sample_kde`,
 `log_prob`, `sample`, `sgm_kernel`, and `bridge_kernel` run in JAX. Discrete block
 selection is not differentiated. Density evaluation is differentiable in query
 points and continuous state leaves; mixture-index draws are discrete and are
 not fully pathwise differentiable. The bridge while-loop is not advertised as
 reverse-mode differentiable.
+
+See [JAX execution enhancements](jax-optimizations.md) for the grouped-state,
+compilation reuse, TC reduction and bridge diagnostic refactor.
 
 ## Efficiency changes that preserve the baseline
 
@@ -52,6 +55,18 @@ SGM only; it does not establish a GPU or end-to-end MorphZ speedup.
 
 ## Explicit changes or extensions
 
+- Bridge iteration defaults to geometric-mean restarts after each 1,000
+  unconverged updates. The seed is `(previous_logZ + current_logZ) / 2`, following
+  Gronau, Heathcote and Matzke (2020), *Computing Bayes factors for
+  evidence-accumulation models using Warp-III bridge sampling*, Results after
+  Figure 5, [doi:10.3758/s13428-019-01290-6](https://doi.org/10.3758/s13428-019-01290-6).
+  Repeating the remedy on a configurable schedule is an implementation extension;
+  we do not adopt the R package's fallback change of tolerance or stopping rule.
+  `geometric_restart=False` restores standard iteration; `restart_interval`
+  controls cycle length independently of compiled chunk size. `max_iterations`
+  caps total bridge updates. History includes each update, not midpoint seeds.
+  Convergence uses the ordinary update from the current seed, never the jump
+  distance. Final averaging excludes values before the latest restart.
 - Weighted KDE and TC support extends the paper's equal-weight workflow.
 - Optional `max_tc_samples` uses a uniform subset without replacement, retains
   and renormalizes its input weights, and may alter the scores and partition.

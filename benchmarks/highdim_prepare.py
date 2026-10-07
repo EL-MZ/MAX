@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .correlation_levels import CORRELATION_LEVELS, DEFAULT_CORRELATION_LEVELS
 from .highdim_io import save_json
 from .highdim_target import SHAPES, make_random_target
 from .regression_target import make_regression_target
@@ -83,6 +84,13 @@ def main():
     parser.add_argument("--family", choices=("regression", "synthetic"), default="regression")
     parser.add_argument("--group-orders", nargs="+", type=int, default=[5])
     parser.add_argument(
+        "--correlation-levels",
+        nargs="+",
+        choices=CORRELATION_LEVELS,
+        default=DEFAULT_CORRELATION_LEVELS,
+        help="posterior correlation levels; default: low medium strong",
+    )
+    parser.add_argument(
         "--variance-coordinate", choices=("variance", "log_variance"), default="variance"
     )
     parser.add_argument("--observations-range", nargs=2, type=int, default=[8, 24])
@@ -111,6 +119,7 @@ def main():
                 variance_coordinate=args.variance_coordinate,
                 observations_range=args.observations_range,
                 cross_group_coupling=args.cross_group_coupling,
+                correlation_levels=args.correlation_levels,
             )
         else:
             target = make_random_target(
@@ -119,6 +128,7 @@ def main():
                 orders=args.orders,
                 shapes=args.shapes,
                 log_evidence=args.log_evidence,
+                correlation_levels=args.correlation_levels,
             )
         prepare_dataset(
             target,

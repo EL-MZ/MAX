@@ -1,5 +1,6 @@
 """Sample-split MorphZ workflow: fit, propose, evaluate, bridge."""
 
+from functools import partial
 from typing import NamedTuple
 
 import jax
@@ -20,13 +21,11 @@ class EvidenceResult(NamedTuple):
     target_evaluations: int
 
 
+@partial(jax.jit, static_argnames=("log_density", "chunk_size"))
 def _evaluate(log_density, points, chunk_size):
-    evaluate_batch = jax.jit(jax.vmap(log_density))
-    results = [
-        evaluate_batch(points[start : start + chunk_size])
-        for start in (range(0, len(points), chunk_size))
-    ]
-    return jnp.concatenate(results)
+    # A stable function identity reuses compilation across workflow invocations.
+    # lax.map handles the remainder without evaluating artificial padded points.
+    return jax.lax.map(log_density, points, batch_size=chunk_size)
 
 
 def estimate_evidence(
@@ -41,6 +40,8 @@ def estimate_evidence(
     rtol=0.1,
     max_iterations=None,
     average_iterations=5,
+    geometric_restart=True,
+    restart_interval=1000,
     evaluation_chunk_size=128,
     **fit_options,
 ):
@@ -52,6 +53,9 @@ def estimate_evidence(
     Weighted KDE fitting is supported by ``fit``; this evidence convenience API
     deliberately requires equal-weight posterior draws, e.g. resampled NS output.
     Cached ``posterior_log_density`` avoids evaluating the held-out posterior.
+    Bridge updates use geometric-mean restarts every ``restart_interval``
+    unconverged updates by default; ``geometric_restart=False`` restores the
+    standard iteration. ``max_iterations`` caps updates across all restarts.
     """
     samples, _ = samples_and_weights(samples)
     if not np.isfinite(fit_fraction) or not 0 < fit_fraction < 1:
@@ -73,8 +77,8 @@ def estimate_evidence(
         posterior_target = _evaluate(log_density, held_out, evaluation_chunk_size)
         evaluations = len(held_out) + n_proposal
     else:
-        cached = np.asarray(posterior_log_density)
-        if cached.shape != (len(samples),) or not np.isfinite(cached).all():
+        cached = jnp.asarray(posterior_log_density)
+        if cached.shape != (len(samples),) or not bool(jnp.all(jnp.isfinite(cached))):
             raise ValueError("posterior_log_density must contain one finite value per sample")
         posterior_target = cached[split:]
         evaluations = n_proposal
@@ -90,6 +94,8 @@ def estimate_evidence(
         rtol=rtol,
         max_iterations=max_iterations,
         average_iterations=average_iterations,
+        geometric_restart=geometric_restart,
+        restart_interval=restart_interval,
     )
     return EvidenceResult(
         bridge, fitted, proposals, jnp.arange(split), jnp.arange(split, len(samples)), evaluations

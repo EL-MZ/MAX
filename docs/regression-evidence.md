@@ -6,6 +6,42 @@ evidence, and independent exact posterior draws. `src/jax_morph` and its
 pair search remain unchanged. The earlier synthetic shape target remains
 available explicitly through `--family synthetic` as a density stress test.
 
+## Posterior correlation levels
+
+New command-line runs default to `--correlation-levels low medium strong`.
+Groups cycle through population absolute Pearson correlations of 0.10–0.30,
+0.40–0.65, and 0.80–0.95, with randomly signed pairs. Every within-group pair
+has the group's recorded strength, including coefficient–variance pairs.
+Independent groups remain independent. The three default 10D corners each
+prefer a different level and rank groups by measured posterior correlation.
+The text summary records the level counts alongside empirical correlation counts.
+
+For visibly strong correlations throughout a new target:
+
+```bash
+bash scripts/run-highdim.sh cpu --correlation-levels strong --plots-only \
+  --output benchmark-results/highdim-strong
+```
+
+The same option is available when preparing datasets. Saved datasets retain
+their saved correlations; regenerate the dataset to change them. Use a fresh
+output directory when changing levels. `--correlation-levels original` restores
+the previous target generation and permits resuming previous configurations.
+The Python target factory keeps `("original",)` as its default for compatibility.
+
+Calibration changes the coordinates of the proper model: a coefficient basis
+change sets the conditional covariance and a determinant-one shear
+`u = beta + k * (t - E[t])` correlates each coefficient with `t`, the variance
+or log variance. The prior and likelihood both evaluate the inverse shear.
+Conditional covariance has signed equicorrelation `rho/(1+rho)` and diagonal
+`(1-rho^2)` times its original diagonal; `k` supplies the remaining marginal
+variance. Consequently every physical within-group Pearson magnitude is `rho`.
+Exact sampling, prior normalization, likelihood normalization, and analytical
+evidence are preserved. The conjugate formulas below refer to the base
+coefficients before this shear; physical coefficient marginals are transformed.
+Optional cross-group coupling can change physical pair correlations further.
+
+
 ## Gaussian evidence: the proposed formula is correct
 
 For fixed `X`, `m0`, positive-definite `Sigma0`, and positive-definite `R`,
@@ -162,7 +198,7 @@ The existing runner accepts prepared regression data:
 ```bash
 bash scripts/run-highdim.sh gpu \
   --dataset benchmark-results/regression-data/3000d \
-  --morph-order 2 --max-candidates 4500000 \
+  --morph-order 2 \
   --output benchmark-results/regression-3000
 ```
 
@@ -201,6 +237,12 @@ computed. `workflow_seconds` also includes diagnostics and bookkeeping.
 Target generation, analytical controls and plots are outside these timings;
 first-call compilation and synchronization are included.
 
+Add `--plots-only` to save the three corner comparisons, evidence plot and `summary.txt`,
+and print an evidence/runtime summary. JSON files are suppressed; progress
+reports remain enabled. The evidence plot shows the dimension count and
+total case computation time, including target setup and analytical controls,
+but excluding plot rendering.
+
 The benchmark now defaults to the top five ranked native SGM seeds, capped
 by the number of available candidates. `--n-seeds` explicitly overrides this
 budget, including smaller counts. There is no square-root rule or automatic
@@ -220,37 +262,51 @@ chunks and retain the complete history and global iteration count. Chunk
 boundaries do not terminate the solver. Nonfinite iterates retain the existing
 failure behavior.
 
+Geometric-mean restarts are now enabled by default after every 1,000
+unconverged bridge updates. The new starting log-Z is the midpoint of the last
+two values. Set `--bridge-restart-interval N` (at least 2) to change the cycle
+length or `--no-geometric-restart` to restore standard iteration. The public
+APIs expose `restart_interval=1000` and `geometric_restart=True`. The total
+`--max-iterations` cap is unchanged, so a cap no larger than the restart interval
+permits no restart. This repeats the remedy published by
+[Gronau, Heathcote and Matzke (2020)](https://doi.org/10.3758/s13428-019-01290-6).
+
 The reported log evidence is now the arithmetic mean of the last five computed
-log-Z iterates, excluding the initialization. If fewer than five updates were
-computed, all available updates are averaged. This averages log-Z values, not
+log-Z iterates, excluding initialization and values before the latest restart.
+If fewer than five updates are available since that restart, only those updates
+are averaged. This averages log-Z values, not
 Z values. Set `--bridge-average-iterations N` or pass `average_iterations=N`
 to `bridge_sampling` or `estimate_evidence`; one returns the final iterate.
 
-The convergence test and iteration history use the original solver iterates.
+The convergence test uses the ordinary bridge update from its input, including
+the new seed after a restart; the midpoint jump cannot itself trigger convergence.
+History retains all bridge updates and does not insert restart seeds.
 `BridgeResult.final_log_evidence` exposes the last actual iterate, and benchmark
 metrics also record `final_iteration_log_evidence` and
 `log_evidence_averaging_iterations`. Overlap and conditional error diagnostics
 are evaluated at the reported average. Averaging does not change a failed
 convergence status, and numerical failures are not averaged away.
 
-Runs print flushed candidate-scoring counts, completed SGM seed counts, proposal
-counts, and bridge iteration updates. Bridge updates show log evidence and the
-absolute change in log evidence, followed by the actual stopping iteration and
-convergence status. Updates occur during computation, not by replaying the
-history after the solver returns. The first JAX compilation can precede the
-first computed update.
+The runner uses tqdm progress bars for candidate scoring, SGM seeds, proposal
+batches (`trange`), and bridge iterations. The bridge bar shows current log
+evidence, its absolute change, convergence status, and the reported averaged
+estimate. Updates reflect completed batches/iterations during computation.
+The first JAX compilation can precede the first computed update. Uncapped
+bridge runs show an iteration counter without an estimated total, then finish
+at the actual stopping iteration.
 
-`--progress-reports 20` is the default: roughly 20 reports per stage, plus
-initial/final messages. Set a different count to change verbosity or use
-`--progress-reports 0` to disable these updates. Candidate and SGM reports occur
-after completed batches, so counts may step past the nominal interval.
-Uncapped bridge runs print periodic updates every 500 iterations by default;
+`--progress-reports 20` is the default: roughly 20 completion notifications per
+compiled stage; tqdm controls display refresh frequency. Set a different count
+to change callback frequency or use `--progress-reports 0` to disable the bars.
+Candidate and SGM notifications occur after completed batches, so counts may
+step past the nominal interval. Proposal bars advance once per completed batch.
+Uncapped bridge runs update every 500 iterations by default;
 the first iteration and actual stopping iteration are also shown. With an
 explicit cap, the periodic interval is based on that cap and progress-reports.
 Uncapped verbosity uses 10,000 iterations as a reporting reference, not a limit.
 The numerical algorithms and termination rules are unchanged.
 
-Direct API calls stay silent by default. Enable reporting with
+Direct API calls stay silent by default and retain text reports when enabled with
 `fit(..., candidate_progress_every=6250, seed_progress_every=18)` or
 `bridge_sampling(..., max_iterations=10000, progress_every=500)`.
 
@@ -281,10 +337,21 @@ coordinates. The saved target records the coupling strength.
 
 At the default base group size five, nonzero coupling creates dependent
 components of size ten, intentionally relaxing the five-dimensional block
-limit for this follow-up. Diagnostics use these larger components; the corner
-plots show selected projections of the base groups. Morph still uses its
+limit for this follow-up. Diagnostics use these larger components; the three
+default 10-parameter corner plots keep coupled components together and choose
+those with the strongest mean absolute posterior correlation within each configured level.
+Morph still uses its
 unchanged pair search. Zero coupling preserves the primary independent-group
 benchmark and its block orders up to five.
+
+With zero coupling, the default 10-parameter panels combine two independent
+five-parameter groups, ranked by their within-group correlation. Selecting a
+panel does not create correlation between these groups. Use `--corner-count 3
+--corner-dimensions 10` to set the plot sizes explicitly. Each plot overlays
+exact posterior draws (black) and Morph draws (blue), labels the original
+parameter indices, and shows its measured maximum and mean absolute Pearson
+correlation. Selected indices and correlation summaries are saved in
+`metrics.json` under `corner_plots`. The evidence history is also retained.
 
 For general new cross-group models, a simple sum of group evidences requires
 factorization or another exact integration argument. A correlated Gaussian

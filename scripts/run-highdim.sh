@@ -28,4 +28,8 @@ if [[ -z "${CUDA_ROOT:-}" ]]; then
   detected_root="$("${python_command[@]}" scripts/detect_cuda_root.py)"
   if [[ -n "$detected_root" ]]; then export CUDA_ROOT="$detected_root"; fi
 fi
+# Correlation defaults: low, medium, strong; use --correlation-levels strong for all strong.
+# Plot defaults: three 10-parameter corners, one per level, ranked within each level.
+# Override with --corner-count / --corner-dimensions, or skip with --no-plots.
+# --plots-only saves plots and summary.txt without JSON; progress remains enabled.
 exec "${python_command[@]}" -m benchmarks.highdim_suite --backend "$backend" "$@"
