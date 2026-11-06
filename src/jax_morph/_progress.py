@@ -5,6 +5,7 @@ from threading import RLock
 
 import jax
 import jax.numpy as jnp
+from tqdm import trange
 
 from ._validation import positive_integer
 
@@ -38,6 +39,22 @@ def emit_progress(label, completed, total=None, **details):
         return False
     _renderer(label, int(completed), total, details)
     return True
+
+
+@contextmanager
+def candidate_progress(total, *, enabled):
+    """Render candidate callbacks with trange unless a caller supplies a renderer."""
+    with _renderer_lock:
+        if not enabled or _renderer is not None:
+            yield
+            return
+        with trange(total, desc="candidate scores", unit="candidate", dynamic_ncols=True) as bar:
+
+            def render(label, completed, total, details):
+                bar.update(max(0, completed - bar.n))
+
+            with progress_renderer(render):
+                yield
 
 
 def report_count(label, completed, total):

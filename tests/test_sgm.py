@@ -63,7 +63,7 @@ def test_more_seeds_cannot_reduce_retained_score_and_exact_small_optimum():
     blocks = np.asarray(candidate_blocks(6, 2))
     scores = np.random.default_rng(10).uniform(size=len(blocks))
     one = seeded_greedy_maximization(blocks, scores, dimension=6, n_seeds=1)
-    all_seeds = seeded_greedy_maximization(blocks, scores, dimension=6)
+    all_seeds = seeded_greedy_maximization(blocks, scores, dimension=6, n_seeds=None)
     assert all_seeds.total_score >= one.total_score
     optimum = max(
         scores[list(indices)].sum()
@@ -73,9 +73,18 @@ def test_more_seeds_cannot_reduce_retained_score_and_exact_small_optimum():
     assert all_seeds.total_score <= optimum + 1e-12
 
 
-def test_candidate_limit_and_incomplete_collection():
-    with pytest.raises(ValueError, match="exceed"):
-        candidate_blocks(30, 5, max_candidates=10_000)
+@pytest.mark.parametrize("dimension,order", [(7, 2), (3, 2), (4, 4)])
+def test_default_uses_top_five_seeds_and_caps_at_candidate_count(dimension, order):
+    blocks = np.asarray(candidate_blocks(dimension, order))
+    scores = np.random.default_rng(61).uniform(size=len(blocks))
+    expected, totals = reference_sgm(blocks, scores, dimension, min(5, len(blocks)))
+    for select in (seeded_greedy_maximization, sgm_kernel):
+        actual = select(blocks, scores, dimension=dimension)
+        np.testing.assert_array_equal(actual.candidate_indices, expected)
+        np.testing.assert_allclose(actual.seed_totals, totals, rtol=1e-12)
+
+
+def test_incomplete_collection_and_invalid_scores():
     blocks = candidate_blocks(5, 2)
     with pytest.raises(ValueError, match="every"):
         seeded_greedy_maximization(blocks[:-1], np.ones(len(blocks) - 1), dimension=5)
@@ -83,7 +92,7 @@ def test_candidate_limit_and_incomplete_collection():
         seeded_greedy_maximization(blocks, -np.ones(len(blocks)), dimension=5)
 
 
-def test_unlimited_enumeration_includes_every_pair_above_default_cap():
-    blocks = np.asarray(candidate_blocks(500, 2, max_candidates=None))
+def test_enumeration_includes_every_pair_above_previous_cap():
+    blocks = np.asarray(candidate_blocks(500, 2))
     assert blocks.shape == (124750, 2)
     np.testing.assert_array_equal(blocks, list(combinations(range(500), 2)))

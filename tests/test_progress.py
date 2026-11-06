@@ -26,7 +26,8 @@ def test_candidate_and_seed_progress_preserves_fit_and_flushes(capsys, monkeypat
     silent = fit(data, **options)
     jax.block_until_ready(silent)
     jax.effects_barrier()
-    assert not capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert not captured.out and not captured.err
     messages = []
     original_print = builtins.print
 
@@ -42,8 +43,11 @@ def test_candidate_and_seed_progress_preserves_fit_and_flushes(capsys, monkeypat
     for actual, expected in zip(reported.diagnostics, silent.diagnostics):
         np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(log_prob(reported.state, data), log_prob(silent.state, data))
-    output = capsys.readouterr().out
-    assert "candidate scores: 21/21" in output
+    captured = capsys.readouterr()
+    output = captured.out
+    assert "candidate scores" in captured.err and "21/21" in captured.err
+    assert "100%" in captured.err and "candidate/s" in captured.err
+    assert "candidate scores" not in output
     assert "SGM seeds: 5/5" in output
     assert len(output.splitlines()) <= 10
     assert messages and all(kwargs.get("flush") is True for _, kwargs in messages)

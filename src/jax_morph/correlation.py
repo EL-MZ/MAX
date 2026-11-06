@@ -7,7 +7,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ._progress import progress_map, report_count, validate_progress_every
+from ._progress import candidate_progress, progress_map, report_count, validate_progress_every
 from ._validation import positive_integer, samples_and_weights
 from .kde import _fit_kde, _validate_kde_options, kde_log_prob
 
@@ -113,18 +113,21 @@ def estimate_total_correlations(
     _validate_kde_options(bandwidth_scale, regularization)
     if np.count_nonzero(weights) <= blocks.shape[1]:
         raise ValueError("TC scoring needs more positive-weight samples than block dimensions")
-    if progress_every:
-        report_count("candidate scores", 0, len(blocks))
-    raw, entropies = _correlation_kernel(
-        jnp.asarray(samples),
-        jnp.asarray(weights),
-        jnp.asarray(blocks),
-        bandwidth_scale,
-        regularization,
-        chunk_size=chunk_size,
-        candidate_batch_size=candidate_batch_size,
-        progress_every=progress_every,
-    )
-    if not bool(_finite_correlations(raw, entropies)):
-        raise ValueError("nonfinite TC scores: check block covariance or set regularization > 0")
+    with candidate_progress(len(blocks), enabled=bool(progress_every)):
+        if progress_every:
+            report_count("candidate scores", 0, len(blocks))
+        raw, entropies = _correlation_kernel(
+            jnp.asarray(samples),
+            jnp.asarray(weights),
+            jnp.asarray(blocks),
+            bandwidth_scale,
+            regularization,
+            chunk_size=chunk_size,
+            candidate_batch_size=candidate_batch_size,
+            progress_every=progress_every,
+        )
+        if not bool(_finite_correlations(raw, entropies)):
+            raise ValueError(
+                "nonfinite TC scores: check block covariance or set regularization > 0"
+            )
     return CorrelationResult(raw, jnp.maximum(raw, 0), entropies, len(samples))

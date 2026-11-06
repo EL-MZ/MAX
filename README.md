@@ -6,6 +6,8 @@ Generated benchmark results and plots are saved locally in `benchmark-results/`,
 which is excluded from Git.
 For configurable TC-only CPU/GPU scaling tests with progress counters, see
 [the TC benchmark](docs/tc-benchmark.md).
+For the real NANOGrav CURN likelihood adapted to JAX MorphZ, see
+[the NANOGrav runner](docs/nanograv-evidence.md).
 
 JAX implementation of the Morph probability density approximation and the
 MorphZ post-processing Bayesian evidence estimator. The baseline follows
@@ -46,7 +48,7 @@ import jax
 from jax_morph import fit, log_prob, sample
 
 # posterior_samples: an existing post-burn-in sample array
-fitted = fit(posterior_samples, order=2, n_seeds=None)
+fitted = fit(posterior_samples, order=2)
 state = fitted.state
 draws = sample(jax.random.key(1), state, n=1000)
 log_densities = log_prob(state, draws)
@@ -58,14 +60,19 @@ print(fitted.diagnostics.retained_total_correlation)
 `fit(samples, weights=...)` accepts nonnegative weights. Silverman's bandwidth
 is the default. `order=2` fits pairs and any residual singleton; `order=1` fits
 independent marginals. Factors must have fewer than ten dimensions. All candidate
-blocks are scored; `max_candidates` prevents accidental combinatorial allocation.
+blocks are enumerated and scored without a candidate-count limit.
 SGM is a heuristic, not an exact matching algorithm.
+It tries five seeds by default. Set `n_seeds` to override the count, or
+`n_seeds=None` to try every candidate.
 `sgm_early_stop=True` enables an equivalent early-exit scan; benchmark it on your
 device before enabling it, since it is not consistently faster across JAX versions.
 
 For cheaper block scoring, explicitly set `max_tc_samples=256` and provide a
 `key`. This uses a reproducible subset for total correlation only; the selected
 KDE factors still use all fitting samples. It can change the selected partition.
+
+Set `candidate_progress_every=100` to show a live `tqdm` bar while scoring
+candidates, including completion counts, elapsed time, and scoring rate.
 
 ## Evidence estimation
 

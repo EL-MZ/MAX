@@ -8,11 +8,11 @@ version = "0.1.0"
 description = "JAX Morph density approximation and bridge-sampling evidence estimation"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["jax>=0.4.35", "numpy>=1.24"]
+dependencies = ["jax>=0.4.35", "numpy>=1.24", "tqdm>=4.66"]
 
 [project.optional-dependencies]
 test = ["pytest>=8", "scipy>=1.11", "ruff>=0.8"]
-benchmark = ["scipy>=1.11", "matplotlib>=3.8", "corner>=2.2", "tqdm>=4.66"]
+benchmark = ["scipy>=1.11", "matplotlib>=3.8", "corner>=2.2"]
 # Pascal (GTX 1070) needs CUDA 12 and a cuDNN release retaining SM 6.1 support.
 cuda = [
     "jax[cuda12]==0.4.35; sys_platform == 'linux'",

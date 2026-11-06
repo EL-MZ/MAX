@@ -145,9 +145,8 @@ bash scripts/run-highdim.sh cpu --dimensions 3000 5000 10000 --dry-run
 | 5,000 | 12,497,500 |
 | 10,000 | 49,995,000 |
 
-The high-dimensional runner disables the library's default candidate-count cap,
-so no `--max-candidates` argument is needed. You can still supply that option
-to set an explicit cap. Choose TC sample count, SGM seeds, and batching yourself.
+All native candidates are enumerated without a candidate-count cap.
+Choose TC sample count, SGM seeds, and batching yourself.
 For prepared data, the runner infers dimension from its manifest:
 
 ```bash

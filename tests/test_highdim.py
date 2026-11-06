@@ -133,7 +133,6 @@ def test_native_morph_bridge_workflow(tmp_path, prepared, plots_only, monkeypatc
         candidate_batch_size=8,
         seed_batch_size=4,
         sgm_early_stop=True,
-        max_candidates=None,
         proposal_chunk_size=32,
         plot_samples=32,
         rtol=1e-6,
@@ -157,7 +156,6 @@ def test_native_morph_bridge_workflow(tmp_path, prepared, plots_only, monkeypatc
     assert np.isfinite(result["log_evidence"]) and np.isfinite(result["forward_kl"])
     assert abs(result["log_evidence_error"]) < 1
     assert result["target_evaluations"] == 64
-    assert calls[0]["max_candidates"] is None
     assert result["total_runtime_seconds"] >= result["workflow_seconds"]
     assert result["proposal_survived_count"] == result["proposal_count"]
     assert result["proposal_survival_fraction"] == 1
@@ -207,13 +205,13 @@ def test_benchmark_sgm_five_seed_default_and_explicit_override():
     assert sgm_seed_count(1, 1, requested=10) == 1
 
 
-def test_runner_allows_more_than_native_candidate_cap_by_default(tmp_path, monkeypatch):
+def test_runner_allows_more_than_previous_candidate_cap(tmp_path, monkeypatch):
     from benchmarks import highdim_suite
 
     cases = []
 
     def capture_case(args, dimension, seed, directory, fit_cache=None):
-        cases.append((args.max_candidates, dimension))
+        cases.append(dimension)
         return dict(complete=True)
 
     monkeypatch.setattr(highdim_suite, "run_case", capture_case)
@@ -221,4 +219,4 @@ def test_runner_allows_more_than_native_candidate_cap_by_default(tmp_path, monke
         "sys.argv", ["highdim_suite", "--dimensions", "500", "--output", str(tmp_path)]
     )
     highdim_suite.main()
-    assert cases == [(None, 500)]  # 124,750 pair candidates exceed the library default cap.
+    assert cases == [500]  # 124,750 pair candidates exceed the previous library cap.

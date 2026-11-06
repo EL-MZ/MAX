@@ -102,8 +102,9 @@ blocks (minimum correlation eigenvalue <= machine epsilon times block size) are
 rejected as well. Continuous KDE state arrays use a common promoted dtype.
 Candidate enumeration scales as choose(d,L), while full KDE TC scoring costs
 roughly O(choose(d,L)*n^2*L). JAX does not eliminate that combinatorial cost.
-Order is limited to 1..9, with default 2. The all-seed default can be expensive;
-smaller K changes the search budget, not the candidate collection.
+Order is limited to 1..9, with default 2. SGM tries five seeds by default;
+an explicit n_seeds overrides this, and n_seeds=None tries every candidate.
+Changing K changes the search budget, not the candidate collection.
 
 For ordered MCMC, use the contiguous held-out batch and inspect chain convergence.
 Do not flatten multiple chains and rely on automatic IAT. The equal-weight

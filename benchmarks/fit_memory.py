@@ -188,7 +188,6 @@ def main():
             candidate_batch_size=32,
             seed_batch_size=5,
             sgm_early_stop=True,
-            max_candidates=comb(args.dimensions, 2),
             candidate_progress_every=max(1, comb(args.dimensions, 2) // 20),
             seed_progress_every=5,
         )

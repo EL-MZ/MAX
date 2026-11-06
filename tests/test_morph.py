@@ -46,6 +46,7 @@ def test_partition_singletons_product_density_and_independent_draws():
     assert sorted(flattened) == list(range(5))
     assert [len(block) for block in state.blocks] == [2, 2, 1]
     assert fitted.diagnostics.tc_sample_count == 80
+    assert len(fitted.diagnostics.seed_totals) == 5
     assert all(len(factor.centers) == 240 for factor in state.factors)
     points = jnp.asarray(rng.normal(size=(20, 5)))
     expected = sum(

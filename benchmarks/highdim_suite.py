@@ -197,7 +197,6 @@ def run_case(args, dimension, seed, directory, fit_cache=None):
         candidate_batch_size=args.candidate_batch_size,
         seed_batch_size=args.seed_batch_size,
         sgm_early_stop=args.sgm_early_stop,
-        max_candidates=args.max_candidates,
         candidate_progress_every=candidate_every,
         seed_progress_every=seed_every,
     )
@@ -423,11 +422,6 @@ def main():
     parser.add_argument(
         "--tc-samples", type=int, help="default: native Morph uses all fitting rows"
     )
-    parser.add_argument(
-        "--max-candidates",
-        type=int,
-        help="optional candidate-count cap; default: unlimited",
-    )
     parser.add_argument("--candidate-batch-size", type=int, default=1)
     parser.add_argument("--seed-batch-size", type=int, default=16)
     parser.add_argument("--sgm-early-stop", action="store_true")
@@ -539,7 +533,6 @@ def main():
     for name in (
         "n_seeds",
         "tc_samples",
-        "max_candidates",
         "candidate_batch_size",
         "seed_batch_size",
         "query_chunk_size",
@@ -571,11 +564,6 @@ def main():
             f"{sgm_seed_count(dimension, args.morph_order, args.n_seeds):,} SGM seeds",
             flush=True,
         )
-        if not args.dry_run and args.max_candidates is not None and count > args.max_candidates:
-            parser.error(
-                f"{count:,} candidates exceed --max-candidates {args.max_candidates:,}; "
-                "explicitly choose a limit"
-            )
     if args.dry_run:
         return
     jax.config.update("jax_enable_x64", True)

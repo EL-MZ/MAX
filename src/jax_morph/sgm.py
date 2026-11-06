@@ -25,20 +25,12 @@ class SGMResult(NamedTuple):
     seed_totals: jax.Array
 
 
-def candidate_blocks(dimension, order=2, *, max_candidates=100_000):
-    """Enumerate all blocks; max_candidates=None disables the allocation limit."""
+def candidate_blocks(dimension, order=2):
+    """Enumerate all length-order combinations of dimension indices."""
     dimension = positive_integer(dimension, "dimension")
     order = positive_integer(order, "order")
-    if max_candidates is not None:
-        positive_integer(max_candidates, "max_candidates")
     if order > dimension:
         raise ValueError("order cannot exceed dimension")
-    count = comb(dimension, order)
-    if max_candidates is not None and count > max_candidates:
-        raise ValueError(
-            f"{count:,} candidate blocks exceed max_candidates={max_candidates:,}; "
-            "choose a smaller order or explicitly raise the limit"
-        )
     return jnp.asarray(list(combinations(range(dimension), order)), dtype=jnp.int32)
 
 
@@ -91,7 +83,7 @@ def sgm_kernel(
     scores,
     *,
     dimension,
-    n_seeds,
+    n_seeds=5,
     seed_batch_size=16,
     early_stop=False,
     progress_every=0,
@@ -101,6 +93,7 @@ def sgm_kernel(
     Stable sorting makes ties reproducible. Seeds are processed in bounded
     batches; no candidate-by-candidate conflict matrix is constructed.
     """
+    n_seeds = min(n_seeds, len(blocks))
     permutation = jnp.argsort(-scores, stable=True)
     sorted_blocks, sorted_scores = blocks[permutation], scores[permutation]
     selected, totals = progress_map(
@@ -120,14 +113,15 @@ def seeded_greedy_maximization(
     scores,
     *,
     dimension,
-    n_seeds=None,
+    n_seeds=5,
     seed_batch_size=16,
     early_stop=False,
     progress_every=0,
 ):
     """Select floor(d/L) disjoint blocks using the top K seeds.
 
-    ``n_seeds=None`` tries every seed. Supply the *complete* set of length-L
+    The default tries the top five seeds (or all candidates if fewer than five).
+    ``n_seeds=None`` explicitly tries every seed. Supply the *complete* set of length-L
     combinations; incomplete graphs would require a separate set-packing API.
     Early stopping preserves selections but its speed depends on device/compiler.
     """
@@ -174,7 +168,7 @@ def _select_validated(
     scores,
     *,
     dimension,
-    n_seeds=None,
+    n_seeds=5,
     seed_batch_size=16,
     early_stop=False,
     progress_every=0,

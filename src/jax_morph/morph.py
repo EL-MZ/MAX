@@ -153,7 +153,7 @@ def fit(
     weights=None,
     *,
     order=2,
-    n_seeds=None,
+    n_seeds=5,
     bandwidth_scale=1.0,
     regularization=0.0,
     max_tc_samples=None,
@@ -162,7 +162,6 @@ def fit(
     candidate_batch_size=1,
     seed_batch_size=16,
     sgm_early_stop=False,
-    max_candidates=100_000,
     candidate_progress_every=0,
     seed_progress_every=0,
 ):
@@ -172,14 +171,14 @@ def fit(
     its own singleton KDE, exactly as in Eq. 5. Orders >= 10 are rejected to
     keep factors low dimensional. Use order=1 for a product of marginals.
     Fitting/selection is host-orchestrated; evaluation and sampling are jittable.
-    Set max_candidates=None to enumerate candidates without a count limit.
+    SGM tries five seeds by default; set n_seeds=None to try every candidate.
     """
     samples, weights = samples_and_weights(samples, weights)
     dimension = samples.shape[1]
     order = positive_integer(order, "order")
     if order > dimension or order >= 10:
         raise ValueError("order must satisfy 1 <= order <= dimension and order < 10")
-    candidates = candidate_blocks(dimension, order, max_candidates=max_candidates)
+    candidates = candidate_blocks(dimension, order)
     if order == 1:
         blocks = tuple((index,) for index in range(dimension))
         raw_scores = scores = jnp.zeros((dimension,))
